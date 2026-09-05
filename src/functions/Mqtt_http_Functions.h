@@ -23,7 +23,6 @@ void reconnect() {
     if (client.connect("pvrouter", MQTT_USER, MQTT_PASSWORD)) {
       Serial.println("connected");
 
-      // Republish Home Assistant discovery and initial values after reconnect
       Mqtt_send("pvrouter-status", String(int(gDisplayValues.froniusup)));
       Mqtt_send("pvrouter-production", String(int(gDisplayValues.production)));
       Mqtt_send("pvrouter-consumption", String(int(gDisplayValues.watt)));
@@ -60,15 +59,21 @@ void Mqtt_send(String sensor, String value) {
 
   if (!config_sent && sentCount < 10) {
     String payload_config = "{";
-    payload_config += "\"name\": \"Puissance " + sensor + "\",";
-    payload_config += "\"state_topic\": \"" + topic_state + "\",";
-    payload_config += "\"unit_of_measurement\": \"W\",";
-    payload_config += "\"device_class\": \"power\",";
-    payload_config += "\"state_class\": \"measurement\",";
-    payload_config += "\"availability_topic\": \"" + topic_status + "\",";
-    payload_config += "\"force_update\": true,";
-    payload_config += "\"unique_id\": \"pvrouter-" + sensor + "\",";
-    payload_config += "\"device\": {\"name\": \"PVRouter ESP32\",\"identifiers\": [\"pvrouter-esp32\"],\"manufacturer\": \"Cédric Poirson\",\"model\": \"TTGO T-Display\",\"sw_version\": \"1.0\"}}";
+    payload_config += "\"name\":\"" + sensor + "\",";
+    payload_config += "\"state_topic\":\"" + topic_state + "\",";
+    payload_config += "\"availability_topic\":\"" + topic_status + "\",";
+    payload_config += "\"payload_available\":\"online\",";
+    payload_config += "\"payload_not_available\":\"offline\",";
+    payload_config += "\"unit_of_measurement\":\"W\",";
+    payload_config += "\"device_class\":\"power\",";
+    payload_config += "\"state_class\":\"measurement\",";
+    payload_config += "\"unique_id\":\"pvrouter-" + sensor + "\",";
+    payload_config += "\"device\":{";
+    payload_config += "\"name\":\"PVRouter ESP32\",";
+    payload_config += "\"identifiers\":[\"pvrouter-esp32\"],";
+    payload_config += "\"manufacturer\":\"Cédric Poirson\",";
+    payload_config += "\"model\":\"TTGO T-Display\",";
+    payload_config += "\"sw_version\":\"1.0\"}}";
 
     client.publish(topic_config.c_str(), payload_config.c_str(), true);
     sentSensors[sentCount++] = sensor;
@@ -85,7 +90,6 @@ void Mqtt_init() {
   Serial.print("Connexion MQTT à ");
   Serial.println(MQTT_SERVER);
   Serial.println("MQTT initialisé");
-
 }
 
 #endif
