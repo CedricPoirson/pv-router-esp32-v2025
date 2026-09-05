@@ -28,9 +28,8 @@
 
             if(!timezoneConfigured) {
                 // Europe/Paris timezone with automatic daylight saving time
-                setenv("TZ", "Europe/Paris", 1);
-                tzset();
-                configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+                // configTzTime applies the timezone directly to ESP32 SNTP
+                configTzTime("CET-1CEST,M3.5.0,M10.5.0", "pool.ntp.org", "time.nist.gov");
                 timezoneConfigured = true;
             }
 
