@@ -22,16 +22,22 @@ void publishHADiscovery() {
     String status = "homeassistant/sensor/" + sensor + "/status";
 
     String payload = "{";
-    payload += "\"name\":\"" + sensor + "\",";
-    payload += "\"unique_id\":\"" + sensor + "\",";
+    payload += "\"name\":\"PVRouter " + sensor + "\",";
+    payload += "\"unique_id\":\"" + sensor + "_esp32\",";
     payload += "\"state_topic\":\"" + state + "\",";
     payload += "\"availability_topic\":\"" + status + "\",";
     payload += "\"payload_available\":\"online\",";
-    payload += "\"payload_not_available\":\"offline\"";
+    payload += "\"payload_not_available\":\"offline\",";
+    payload += "\"device\":{";
+    payload += "\"identifiers\":[\"pvrouter_esp32\"],";
+    payload += "\"name\":\"PVRouter ESP32\",";
+    payload += "\"manufacturer\":\"Cédric Poirson\",";
+    payload += "\"model\":\"PV Router ESP32\"}";
 
     if (sensor != "pvrouter-status") {
-      payload += ",\"unit_of_measurement\":\"W\"";
-      payload += ",\"device_class\":\"power\"";
+      payload += ",\"unit_of_measurement\":\"W\",";
+      payload += "\"device_class\":\"power\",";
+      payload += "\"state_class\":\"measurement\"";
     }
 
     payload += "}";
