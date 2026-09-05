@@ -14,13 +14,10 @@ PubSubClient client(espClient);
 
 extern DisplayValues gDisplayValues;
 
-/***
- *  Reconnexion au serveur MQTT
- */
 void reconnect() {
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
-    if (client.connect("arduinoClient", MQTT_USER, MQTT_PASSWORD)) {
+    if (client.connect("pvrouter", MQTT_USER, MQTT_PASSWORD)) {
       Serial.println("connected");
     } else {
       Serial.print("failed, rc=");
@@ -31,9 +28,14 @@ void reconnect() {
   }
 }
 
-/***
- *  Envoi des données MQTT en format compatible Home Assistant Discovery
- */
+void Mqtt_loop() {
+  if (client.connected()) {
+    client.loop();
+  } else {
+    reconnect();
+  }
+}
+
 void Mqtt_send(String sensor, String value) {
   String topic_state = "homeassistant/sensor/" + sensor + "/state";
   String topic_config = "homeassistant/sensor/" + sensor + "/config";
@@ -43,7 +45,6 @@ void Mqtt_send(String sensor, String value) {
   static int sentCount = 0;
 
   bool config_sent = false;
-
   for (int i = 0; i < sentCount; i++) {
     if (sentSensors[i] == sensor) {
       config_sent = true;
@@ -61,36 +62,19 @@ void Mqtt_send(String sensor, String value) {
     payload_config += "\"availability_topic\": \"" + topic_status + "\",";
     payload_config += "\"force_update\": true,";
     payload_config += "\"unique_id\": \"pvrouter-" + sensor + "\",";
-    payload_config += "\"device\": {";
-    payload_config += "\"name\": \"PVRouter ESP32\",";
-    payload_config += "\"identifiers\": [\"pvrouter-esp32\"],";
-    payload_config += "\"manufacturer\": \"Cédric Poirson\",";
-    payload_config += "\"model\": \"TTGO T-Display\",";
-    payload_config += "\"sw_version\": \"1.0\"";
-    payload_config += "}}";
+    payload_config += "\"device\": {\"name\": \"PVRouter ESP32\",\"identifiers\": [\"pvrouter-esp32\"],\"manufacturer\": \"Cédric Poirson\",\"model\": \"TTGO T-Display\",\"sw_version\": \"1.0\"}}";
 
-    Serial.print("MQTT DISCOVERY : ");
-    Serial.println(topic_config);
     client.publish(topic_config.c_str(), payload_config.c_str(), true);
     sentSensors[sentCount++] = sensor;
   }
-
-  Serial.print("MQTT STATUS : ");
-  Serial.println(topic_status);
-  Serial.print("MQTT STATE : ");
-  Serial.print(topic_state);
-  Serial.print(" = ");
-  Serial.println(value);
 
   client.publish(topic_status.c_str(), "online", true);
   client.publish(topic_state.c_str(), value.c_str(), true);
 }
 
-/***
- *  Initialisation du client MQTT
- */
 void Mqtt_init() {
   client.setServer(MQTT_SERVER, MQTT_PORT);
+  client.setKeepAlive(60);
 
   Serial.print("Connexion MQTT à ");
   Serial.println(MQTT_SERVER);
