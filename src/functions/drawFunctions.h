@@ -3,66 +3,65 @@
 
 #include <WiFi.h>
 
-
-#include <NTPClient.h>
 #include "../config/enums.h"
 #include "../config/config.h"
 
-#ifdef  DEVKIT1
+#ifdef DEVKIT1
 #include "SSD1306Wire.h"
 extern SSD1306Wire display;
 #endif
 
-#ifdef  TTGO
+#ifdef TTGO
 #include <TFT_eSPI.h>
 extern TFT_eSPI display;
 #endif
 
-
-extern DisplayValues gDisplayValues;
-
-// Fronius Inverter
-//#include "HTTPClient.h"
-//const char *HOST = "192.168.100.245";
-
-bool test ;
-
 extern DisplayValues gDisplayValues;
 extern unsigned char measureIndex;
-extern NTPClient timeClient;
+
+bool test;
 
 void drawTime(){
-  #ifdef  DEVKIT1
+  // The NTP task stores the Europe/Paris local time in gDisplayValues.time.
+  // Do not use NTPClient::getFormattedTime() here: it only knows a fixed
+  // offset and was the reason the TFT stayed around 01:xx after NTP sync.
+  String displayTime = gDisplayValues.time.length() > 0
+                         ? gDisplayValues.time
+                         : "--:--:--";
+
+  #ifdef DEVKIT1
     display.setTextAlignment(TEXT_ALIGN_LEFT);
     display.setFont(ArialMT_Plain_10);
-    display.drawString(0, 0,timeClient.getFormattedTime());
+    display.drawString(0, 0, displayTime);
   #endif
-  #ifdef  TTGO
+
+  #ifdef TTGO
     display.setCursor(0, 0, 2);
-    display.setTextColor(TFT_WHITE,TFT_BLACK);  display.setTextSize(1);
-    display.println(timeClient.getFormattedTime());
+    display.setTextColor(TFT_WHITE, TFT_BLACK);
+    display.setTextSize(1);
+    display.println(displayTime);
   #endif
 }
 
 void drawIP(){
-  #ifdef  DEVKIT1
+  #ifdef DEVKIT1
     display.setTextAlignment(TEXT_ALIGN_LEFT);
     display.setFont(ArialMT_Plain_10);
     display.drawString(64, 0,gDisplayValues.IP);
   #endif
-  #ifdef  TTGO
+  #ifdef TTGO
     display.setCursor(120, 0, 2);
     display.setTextColor(TFT_WHITE,TFT_BLACK);  display.setTextSize(1);
     display.println(gDisplayValues.IP);
   #endif
 }
 void drawversion(){
-  #ifdef  DEVKIT1
+  #ifdef DEVKIT1
     display.setTextAlignment(TEXT_ALIGN_LEFT);
     display.setFont(ArialMT_Plain_10);
     display.drawString(64, 0,VERSION);
   #endif
-  #ifdef  TTGO
+  #ifdef TTGO
     display.setCursor(150, 15, 2);
     display.setTextColor(TFT_WHITE,TFT_BLACK);  display.setTextSize(1);
     display.println(VERSION);
@@ -128,12 +127,12 @@ void drawSignalStrength(){
 
   // Draw bar 3
   if(gDisplayValues.wifi_strength > -60){
-    display.fillRect(X+X_SPACING*2, 8-6, 1, 6);
+    display.fillRect(X + X_SPACING*2, 8-6, 1, 6);
   }
 
   // Draw bar 4
   if(gDisplayValues.wifi_strength >= -50){
-    display.fillRect(X+X_SPACING*3, 8-8, 1, 8);
+    display.fillRect(X + X_SPACING*3, 8-8, 1, 8);
   }
   #endif
 }
@@ -163,6 +162,7 @@ void drawBootscreen(){
   display.fillRect(X + X_SPACING*2, Y - HEIGHT_STEP*2, WIDTH, MAX_HEIGHT - HEIGHT_STEP);
   display.fillRect(X + X_SPACING*3, Y - HEIGHT_STEP*3, WIDTH, MAX_HEIGHT);
 
+  display.setColor(WHITE);
   display.setTextAlignment(TEXT_ALIGN_CENTER);
   display.setFont(ArialMT_Plain_16);
   display.drawString(0, Y + MAX_HEIGHT / 2 ,"Connecting" );
