@@ -360,14 +360,10 @@ void loop()
 
 #if WIFI_ACTIVE == true
 
-    #if MQTT_CLIENT == true
-    if (!client.connected()) {
-    reconnect();
-    }
-    #endif
-#endif
+  #if MQTT_CLIENT == true
+    Mqtt_loop();
+  #endif
 
-
-
-  vTaskDelay(10000 / portTICK_PERIOD_MS);
+  vTaskDelay(100 / portTICK_PERIOD_MS);
+#endif  
 }
