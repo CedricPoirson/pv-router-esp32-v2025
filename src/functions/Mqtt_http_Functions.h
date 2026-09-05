@@ -35,7 +35,11 @@ void publishHADiscovery() {
     }
 
     payload += "}";
-    client.publish(config.c_str(), payload.c_str(), true);
+
+    bool ok = client.publish(config.c_str(), payload.c_str(), true);
+    Serial.print("MQTT Discovery ");
+    Serial.print(config);
+    Serial.println(ok ? " OK" : " FAILED");
   }
 }
 
