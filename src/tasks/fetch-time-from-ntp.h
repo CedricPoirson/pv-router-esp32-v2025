@@ -2,41 +2,49 @@
 #define TASK_FETCH_TIME_NTP
 
 #if NTP_TIME_SYNC_ENABLED == true
-    #include <Arduino.h>
-    #include <WiFi.h>
-    #include <NTPClient.h>
-    #include <WiFiUdp.h>
-    #include <NTPClient.h>
-    #include "../config/enums.h"
 
-    extern void reconnectWifiIfNeeded();
-    extern DisplayValues gDisplayValues;
+#include <Arduino.h>
+#include <WiFi.h>
+#include <NTPClient.h>
+#include <time.h>
+#include "../config/enums.h"
 
-    extern NTPClient timeClient;
+extern NTPClient timeClient;
 
-    void fetchTimeFromNTP(void * parameter){
-        for(;;){
-            
-            if(!WiFi.isConnected()){   /// si pas de connexion Wifi test dans 10 s 
-                vTaskDelay(10*1000 / portTICK_PERIOD_MS);
-                continue;
-            }
+// Fuseau Europe/Paris avec bascule automatique heure d'été / heure d'hiver.
+static const char *PARIS_TZ = "CET-1CEST,M3.5.0/2,M10.5.0/3";
 
-            serial_println("[NTP] Updating...");
+void fetchTimeFromNTP(void *parameter) {
+  bool timezoneConfigured = false;
 
-            timeClient.update();
-
-
-            //String timestring = timeClient.getFormattedTime();
-            //short tIndex = timestring.indexOf("T");
-           // gDisplayValues.time = timestring.substring(tIndex + 1, timestring.length() -3);
-            
-            serial_println("[NTP] Done");
-            
-            // Sleep for a minute before checking again
-            vTaskDelay(NTP_UPDATE_INTERVAL_MS / portTICK_PERIOD_MS);
-        }
+  for (;;) {
+    if (!WiFi.isConnected()) {
+      vTaskDelay(10 * 1000 / portTICK_PERIOD_MS);
+      continue;
     }
+
+    serial_println("[NTP] Updating...");
+
+    // Configure aussi l'horloge système ESP32. SNTP gère ensuite la resynchronisation.
+    if (!timezoneConfigured) {
+      configTzTime(PARIS_TZ, NTP_SERVER);
+      timezoneConfigured = true;
+    }
+
+    // NTPClient est conservé pour ne pas modifier le reste de l'affichage.
+    // On ajuste simplement son offset selon l'heure d'été/hiver réellement active.
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo, 5000)) {
+      timeClient.setTimeOffset(timeinfo.tm_isdst > 0 ? 7200 : 3600);
+    }
+
+    timeClient.update();
+
+    serial_println("[NTP] Done");
+
+    vTaskDelay(NTP_UPDATE_INTERVAL_MS / portTICK_PERIOD_MS);
+  }
+}
 
 #endif
 #endif
