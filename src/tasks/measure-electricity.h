@@ -2,89 +2,81 @@
 #define TASK_MEASURE_ELECTRICITY
 
 #include <Arduino.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
 #include "config/config.h"
 #include "config/enums.h"
-#include "mqtt-aws.h"
-#include "mqtt-home-assistant.h"
-#include "functions/energyFunctions.h"
-#include "functions/dimmerFunction.h"
-#include "functions/drawFunctions.h"
-
-// Fronius Inverter
-#include "HTTPClient.h"
-#include <ArduinoJson.h>  // Make sure this is included for JSON handling
+#include "functions/Mqtt_http_Functions.h"
 
 extern DisplayValues gDisplayValues;
-extern Config config; 
+extern Config config;
 
 int Pow_mqtt_send = 0;
 
-void measureElectricityf(void * parameter)
-{
-    for(;;){
-        long start = millis();
+void measureElectricityf(void *parameter) {
+  for (;;) {
+#if WIFI_ACTIVE == true
+    if (WiFi.isConnected()) {
+      HTTPClient http;
+      const String url = "http://" + String(IP_FRONIUS) +
+                         "/solar_api/v1/GetPowerFlowRealtimeData.fcgi";
 
-        #if WIFI_ACTIVE == true
-            HTTPClient http;
-            String url = "http://" + String(IP_FRONIUS) + "/solar_api/v1/GetPowerFlowRealtimeData.fcgi";
-            String url2 = "http://" + String(IP_FRONIUS) + "/solar_api/v1/GetPowerFlowRealtimeData.fcgi";
-            
-            http.begin(url);
-            int httpCode = http.GET();
+      http.setConnectTimeout(1500);
+      http.setTimeout(2000);
+      http.begin(url);
 
-            Serial.print("httpCode / function measure: ");
-            Serial.println(httpCode);
+      const int httpCode = http.GET();
 
-            #if(httpCode == HTTP_CODE_OK) 
-                String payload = http.getString();
-                DynamicJsonDocument doc(900);
-                DeserializationError error = deserializeJson(doc, payload);
+      if (httpCode == HTTP_CODE_OK) {
+        const String payload = http.getString();
+        DynamicJsonDocument doc(4096);
+        const DeserializationError error = deserializeJson(doc, payload);
 
-                long generatedPower = doc["Body"]["Data"]["Inverters"]["1"]["P"];
-                gDisplayValues.production  = generatedPower;
-            #else
-                gDisplayValues.froniusup = false;
-                Serial.println("gDisplayValues.froniusup = false");
-            #endif
-            http.end();
+        if (!error) {
+          JsonVariant pGrid = doc["Body"]["Data"]["Site"]["P_Grid"];
 
-            HTTPClient http2;
-            http2.begin(url2);
-            httpCode = http2.GET();
-            #if(httpCode == HTTP_CODE_OK) 
-                String payload2 = http2.getString();
-                DynamicJsonDocument doc2(1500);
-                error = deserializeJson(doc2, payload2);
+          if (!pGrid.isNull()) {
+            // P_Grid > 0 : import réseau / P_Grid < 0 : injection.
+            gDisplayValues.watt = pGrid.as<double>();
 
-                long generatedPower2 = doc2["Body"]["Data"]["Site"]["P_Grid"];
-                gDisplayValues.watt  =  generatedPower2;
-                gDisplayValues.froniusup = true;
-            #else
-                gDisplayValues.froniusup = false;
-            #endif
-            http2.end();
-            Serial.print("generatedPower2 / function measure: ");
-            Serial.println(generatedPower2);
-            Serial.print("gDisplayValues.production / function measure: ");
-            Serial.println(gDisplayValues.production);
-            Serial.print("gDisplayValues.watt / function measure: ");
-            Serial.println(gDisplayValues.watt);
-            Serial.print("gDisplayValues.froniusup / function measure: ");
-            Serial.println(gDisplayValues.froniusup);
-        #endif
-
-        long end = millis();
-
-        #if WIFI_ACTIVE == true
-            Pow_mqtt_send++;
-            if (Pow_mqtt_send > 10) {
-                Mqtt_send(String(config.IDX), String(int(gDisplayValues.watt)));  
-                Pow_mqtt_send = 0;
+            // Additionne les puissances si plusieurs onduleurs Fronius sont présents.
+            double production = 0.0;
+            JsonObject inverters = doc["Body"]["Data"]["Inverters"].as<JsonObject>();
+            for (JsonPair inverter : inverters) {
+              production += inverter.value()["P"] | 0.0;
             }
-        #endif
-        
-        vTaskDelay(2000 / portTICK_PERIOD_MS);  // Delay for 2 seconds to avoid overloading the system
-    }    
+            gDisplayValues.production = production;
+            gDisplayValues.froniusup = true;
+          } else {
+            gDisplayValues.froniusup = false;
+            serial_println("[FRONIUS] P_Grid missing in JSON response");
+          }
+        } else {
+          gDisplayValues.froniusup = false;
+          serial_print("[FRONIUS] JSON error: ");
+          serial_println(error.c_str());
+        }
+      } else {
+        gDisplayValues.froniusup = false;
+        serial_print("[FRONIUS] HTTP error: ");
+        serial_println(httpCode);
+      }
+
+      http.end();
+    } else {
+      gDisplayValues.froniusup = false;
+    }
+
+    // Publication MQTT environ toutes les 22 secondes avec une mesure toutes les 2 s.
+    Pow_mqtt_send++;
+    if (Pow_mqtt_send > 10) {
+      Mqtt_send(String(config.IDX), String(int(gDisplayValues.watt)));
+      Pow_mqtt_send = 0;
+    }
+#endif
+
+    vTaskDelay(2000 / portTICK_PERIOD_MS);
+  }
 }
 
 #endif
