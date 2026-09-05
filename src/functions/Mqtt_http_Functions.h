@@ -39,11 +39,21 @@ void Mqtt_send(String sensor, String value) {
   String topic_config = "homeassistant/sensor/" + sensor + "/config";
   String topic_status = "homeassistant/sensor/" + sensor + "/status";
 
-  // On envoie la config seulement au démarrage
-  static bool config_sent = false;
-  if (!config_sent) {
+  static String sentSensors[10];
+  static int sentCount = 0;
+
+  bool config_sent = false;
+
+  for (int i = 0; i < sentCount; i++) {
+    if (sentSensors[i] == sensor) {
+      config_sent = true;
+      break;
+    }
+  }
+
+  if (!config_sent && sentCount < 10) {
     String payload_config = "{";
-    payload_config += "\"name\": \"Puissance Chauffe-eau " + sensor + "\",";
+    payload_config += "\"name\": \"Puissance " + sensor + "\",";
     payload_config += "\"state_topic\": \"" + topic_state + "\",";
     payload_config += "\"unit_of_measurement\": \"W\",";
     payload_config += "\"device_class\": \"power\",";
@@ -60,14 +70,12 @@ void Mqtt_send(String sensor, String value) {
     payload_config += "}}";
 
     client.publish(topic_config.c_str(), payload_config.c_str(), true);
-    config_sent = true;
+    sentSensors[sentCount++] = sensor;
   }
 
-  // Envoi de présence + valeur
   client.publish(topic_status.c_str(), "online", true);
   client.publish(topic_state.c_str(), value.c_str(), true);
 }
-
 
 /***
  *  Initialisation du client MQTT
