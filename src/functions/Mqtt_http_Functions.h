@@ -14,12 +14,19 @@ PubSubClient client(espClient);
 
 extern DisplayValues gDisplayValues;
 
+void Mqtt_send(String sensor, String value);
+
 void reconnect() {
   if (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
 
     if (client.connect("pvrouter", MQTT_USER, MQTT_PASSWORD)) {
       Serial.println("connected");
+
+      // Republish Home Assistant discovery and initial values after reconnect
+      Mqtt_send("pvrouter-status", String(int(gDisplayValues.froniusup)));
+      Mqtt_send("pvrouter-production", String(int(gDisplayValues.production)));
+      Mqtt_send("pvrouter-consumption", String(int(gDisplayValues.watt)));
     } else {
       Serial.print("failed, rc=");
       Serial.println(client.state());
