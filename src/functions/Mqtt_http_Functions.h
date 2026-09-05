@@ -69,9 +69,18 @@ void Mqtt_send(String sensor, String value) {
     payload_config += "\"sw_version\": \"1.0\"";
     payload_config += "}}";
 
+    Serial.print("MQTT DISCOVERY : ");
+    Serial.println(topic_config);
     client.publish(topic_config.c_str(), payload_config.c_str(), true);
     sentSensors[sentCount++] = sensor;
   }
+
+  Serial.print("MQTT STATUS : ");
+  Serial.println(topic_status);
+  Serial.print("MQTT STATE : ");
+  Serial.print(topic_state);
+  Serial.print(" = ");
+  Serial.println(value);
 
   client.publish(topic_status.c_str(), "online", true);
   client.publish(topic_state.c_str(), value.c_str(), true);
