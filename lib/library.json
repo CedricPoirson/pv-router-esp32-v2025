@@ -1,0 +1,8 @@
+{
+  "name": "AsyncElegantOTA",
+  "version": "2.2.7",
+  "keywords": "ota, web, async, esp32, esp8266",
+  "description": "AsyncElegantOTA - OTA via web UI using AsyncWebServer",
+  "frameworks": "arduino",
+  "platforms": "*"
+}

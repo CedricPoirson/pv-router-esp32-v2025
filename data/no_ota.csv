@@ -1,0 +1,7 @@
+# ESP32 partition table
+# name, type, subtype, offset, size, flags
+# Name                Type       SubType    Offset   Size     Flags
+nvs                 data       nvs         0x9000  0x6000
+otadata             data       ota         0xF000  0x2000
+app0                app        ota_0       0x1000  1M
+spiffs              data       spiffs      0x10000 3M

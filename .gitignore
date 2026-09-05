@@ -1,0 +1,17 @@
+# PlatformIO
+.pio/
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Archives / sauvegardes locales
+*.zip
+
+# Secrets / configuration locale
+.env
+secrets.h
+src/config/config.h
