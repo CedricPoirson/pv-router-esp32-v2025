@@ -28,7 +28,7 @@
 
             if(!timezoneConfigured) {
                 // Europe/Paris timezone with automatic daylight saving time
-                setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0", 1);
+                setenv("TZ", "Europe/Paris", 1);
                 tzset();
                 configTime(0, 0, "pool.ntp.org", "time.nist.gov");
                 timezoneConfigured = true;
