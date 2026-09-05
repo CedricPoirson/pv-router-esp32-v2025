@@ -15,15 +15,14 @@ PubSubClient client(espClient);
 extern DisplayValues gDisplayValues;
 
 void reconnect() {
-  while (!client.connected()) {
+  if (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
+
     if (client.connect("pvrouter", MQTT_USER, MQTT_PASSWORD)) {
       Serial.println("connected");
     } else {
       Serial.print("failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
-      delay(5000);
+      Serial.println(client.state());
     }
   }
 }
