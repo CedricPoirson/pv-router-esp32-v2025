@@ -16,6 +16,8 @@ void Mqtt_send(String sensor, String value);
 void publishHADiscovery() {
   String sensors[] = {"pvrouter-production", "pvrouter-consumption", "pvrouter-status"};
 
+  Serial.println("=== MQTT HA DISCOVERY START ===");
+
   for (String sensor : sensors) {
     String state = "homeassistant/sensor/" + sensor + "/state";
     String config = "homeassistant/sensor/" + sensor + "/config";
@@ -42,11 +44,21 @@ void publishHADiscovery() {
 
     payload += "}";
 
+    Serial.println("Discovery topic:");
+    Serial.println(config);
+    Serial.println("Payload:");
+    Serial.println(payload);
+    Serial.print("Payload size: ");
+    Serial.println(payload.length());
+
     bool ok = client.publish(config.c_str(), payload.c_str(), true);
-    Serial.print("MQTT Discovery ");
-    Serial.print(config);
-    Serial.println(ok ? " OK" : " FAILED");
+    client.loop();
+
+    Serial.print("MQTT Discovery result: ");
+    Serial.println(ok ? "OK" : "FAILED");
   }
+
+  Serial.println("=== MQTT HA DISCOVERY END ===");
 }
 
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
@@ -73,6 +85,7 @@ void Mqtt_send(String sensor, String value) {
 
   client.publish(status.c_str(), "online", true);
   client.publish(state.c_str(), value.c_str(), true);
+  client.loop();
 }
 
 void Mqtt_init() {
