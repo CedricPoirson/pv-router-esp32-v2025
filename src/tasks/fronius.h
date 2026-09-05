@@ -18,7 +18,7 @@
 
 
 extern DisplayValues gDisplayValues;
-//extern EnergyMonitor emon1;
+//extern EnergyMonitor emon1
 extern Config config; 
 
 
@@ -133,7 +133,13 @@ Serial.println(gDisplayValues.watt);
     #if WIFI_ACTIVE == true
         Pow_mqtt_send ++ ;
         if ( Pow_mqtt_send > 10 ) {
-            Mqtt_send(String(config.IDX), String(int(gDisplayValues.watt)));  
+            Mqtt_send(String(config.IDX), String(int(gDisplayValues.watt)));
+
+            // Home Assistant - capteurs Fronius
+            Mqtt_send("pvrouter-production", String(int(gDisplayValues.production)));
+            Mqtt_send("pvrouter-consumption", String(int(gDisplayValues.watt)));
+            Mqtt_send("pvrouter-status", String(int(gDisplayValues.froniusup)));
+
             Pow_mqtt_send = 0 ;
         }
     #endif
