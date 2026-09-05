@@ -6,7 +6,6 @@
     #include <WiFi.h>
     #include <NTPClient.h>
     #include <WiFiUdp.h>
-    #include <NTPClient.h>
     #include "../config/enums.h"
 
     extern void reconnectWifiIfNeeded();
@@ -17,23 +16,25 @@
     void fetchTimeFromNTP(void * parameter){
         for(;;){
             
-            if(!WiFi.isConnected()){   /// si pas de connexion Wifi test dans 10 s 
+            if(!WiFi.isConnected()){
                 vTaskDelay(10*1000 / portTICK_PERIOD_MS);
                 continue;
             }
 
             serial_println("[NTP] Updating...");
 
-            timeClient.update();
+            // Europe/Paris timezone with automatic daylight saving time
+            configTime(3600, 3600, "pool.ntp.org", "time.nist.gov");
 
+            struct tm timeinfo;
+            if(getLocalTime(&timeinfo)) {
+                char buffer[32];
+                strftime(buffer, sizeof(buffer), "%H:%M:%S", &timeinfo);
+                gDisplayValues.time = String(buffer);
+            }
 
-            //String timestring = timeClient.getFormattedTime();
-            //short tIndex = timestring.indexOf("T");
-           // gDisplayValues.time = timestring.substring(tIndex + 1, timestring.length() -3);
-            
             serial_println("[NTP] Done");
             
-            // Sleep for a minute before checking again
             vTaskDelay(NTP_UPDATE_INTERVAL_MS / portTICK_PERIOD_MS);
         }
     }
