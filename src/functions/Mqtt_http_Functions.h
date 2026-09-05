@@ -78,16 +78,8 @@ void Mqtt_init() {
 
   Serial.print("Connexion MQTT à ");
   Serial.println(MQTT_SERVER);
+  Serial.println("MQTT initialisé");
 
-  bool ok = client.connect("pvrouter", MQTT_USER, MQTT_PASSWORD);
-
-  if (ok) {
-    Serial.println("MQTT connecté !");
-    Mqtt_send(String(config.IDXdimmer), "0");
-  } else {
-    Serial.print("MQTT échec, rc=");
-    Serial.println(client.state());
-  }
 }
 
 #endif
