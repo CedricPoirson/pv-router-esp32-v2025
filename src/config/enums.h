@@ -21,14 +21,28 @@ struct DisplayValues {
   DEVICE_STATE currentState;
   String IP;
   String time;
-  bool injection; 
+
+  // Energy
+  bool injection;
+  double injectionPower;
+  double gridPower;
+  double todayPV;
+  double tomorrowPV;
+
+  // Existing functions
   int dimmer;
-  int security; 
+  int security;
   int change;
   bool task;
-  bool porteuse; 
-  bool screenstate; 
+  bool porteuse;
+  bool screenstate;
+
+  // Additional display data
   String temperature;
+  float piscineTemp;
+  bool pompePiscine;
+  bool machinePossible;
+
   double production;
   bool froniusup;
 };
@@ -57,16 +71,15 @@ struct Config {
   int IDXdimmer;
   int tmax;
   int resistance;
-  bool polarity; 
+  bool polarity;
   char Publish[100];
-  int  ScreenTime;
+  int ScreenTime;
 };
 
 struct Configwifi {
   char SID[32];
   char passwd[64];
 };
-
 
 #if DEBUG == true
   #define serial_print(x)  Serial.print (x)
