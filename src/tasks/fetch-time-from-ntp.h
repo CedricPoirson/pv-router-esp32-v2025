@@ -6,6 +6,7 @@
     #include <WiFi.h>
     #include <NTPClient.h>
     #include <WiFiUdp.h>
+    #include <time.h>
     #include "../config/enums.h"
 
     extern void reconnectWifiIfNeeded();
@@ -14,6 +15,8 @@
     extern NTPClient timeClient;
 
     void fetchTimeFromNTP(void * parameter){
+        bool timezoneConfigured = false;
+
         for(;;){
             
             if(!WiFi.isConnected()){
@@ -23,14 +26,23 @@
 
             serial_println("[NTP] Updating...");
 
-            // Europe/Paris timezone with automatic daylight saving time
-            configTime(3600, 3600, "pool.ntp.org", "time.nist.gov");
+            if(!timezoneConfigured) {
+                // Europe/Paris timezone with automatic daylight saving time
+                setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0", 1);
+                tzset();
+                configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+                timezoneConfigured = true;
+            }
 
             struct tm timeinfo;
-            if(getLocalTime(&timeinfo)) {
+            if(getLocalTime(&timeinfo, 10000)) {
                 char buffer[32];
                 strftime(buffer, sizeof(buffer), "%H:%M:%S", &timeinfo);
                 gDisplayValues.time = String(buffer);
+                serial_print("[NTP] Time: ");
+                serial_println(buffer);
+            } else {
+                serial_println("[NTP] Failed to get time");
             }
 
             serial_println("[NTP] Done");
