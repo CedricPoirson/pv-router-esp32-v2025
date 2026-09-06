@@ -19,6 +19,11 @@ extern Config config;
 
 int Pow_mqtt_send = 0;
 
+// Incremented only after a complete, validated PowerFlow sample has been
+// written to gDisplayValues. The dimmer task uses this counter to react once
+// per fresh Fronius sample instead of waiting on an unrelated 5 s timer.
+volatile uint32_t gFroniusSampleCounter = 0;
+
 void measureElectricityf(void * parameter)
 {
     for (;;) {
@@ -78,7 +83,10 @@ void measureElectricityf(void * parameter)
         gDisplayValues.froniusup = validFroniusSample;
 
         if (validFroniusSample) {
-            Serial.printf("[FRONIUS] PV=%.0f W GRID=%.0f W OK=1\n",
+            // Publish the sample only after every value above is complete.
+            gFroniusSampleCounter++;
+            Serial.printf("[FRONIUS #%lu] PV=%.0f W GRID=%.0f W OK=1\n",
+                          (unsigned long)gFroniusSampleCounter,
                           gDisplayValues.production,
                           gDisplayValues.grid);
         }
