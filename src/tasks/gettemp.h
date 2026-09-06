@@ -47,14 +47,19 @@ void GetDImmerTemp(void * parameter){
           gDisplayValues.dimmerReported = constrain(doc["dimmer"] | 0, 0, 100);
           gDisplayValues.dimmerCommandReported = constrain(doc["commande"] | 0, 0, 100);
 
-          const char *dallas0 = doc["dallas0"] | nullptr;
-          const char *temperature = doc["temperature"] | nullptr;
-          if (dallas0 && dallas0[0] != '\0')
-            gDisplayValues.temperature = dallas0;
-          else if (temperature && temperature[0] != '\0')
-            gDisplayValues.temperature = temperature;
-          else
-            gDisplayValues.temperature = "";
+          String ecsTemp = "";
+
+          if (doc["dallas0"].is<const char*>()) {
+            ecsTemp = doc["dallas0"].as<String>();
+          }
+          else if (doc["temperature"].is<const char*>()) {
+            ecsTemp = doc["temperature"].as<String>();
+          }
+
+          gDisplayValues.temperature = ecsTemp;
+
+          Serial.printf("[DIMMER TEMP PARSED] %s\n",
+                        gDisplayValues.temperature.c_str());
 
           gDisplayValues.dimmerPower = doc["power"] | 0.0f;
           gDisplayValues.dimmerPtotal = doc["Ptotal"] | 0.0f;
