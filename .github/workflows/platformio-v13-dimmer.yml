@@ -1,0 +1,30 @@
+name: PlatformIO V13 Dimmer CI
+
+on:
+  push:
+    branches:
+      - feature/fronius-zero-grid-v13-dimmer-20260514
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Prepare non-secret build configuration
+        run: |
+          cp src/config/config.example.h src/config/config.h
+          cp data/no_ota.csv no_ota.csv
+
+      - name: Build TTGO T-Display firmware
+        run: pio run -e ttgo-t-display
