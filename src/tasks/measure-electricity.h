@@ -37,25 +37,35 @@ void measureElectricityf(void * parameter)
 
             if (httpCode == HTTP_CODE_OK) {
                 String payload = http.getString();
-                DynamicJsonDocument doc(1500);
+                DynamicJsonDocument doc(2500);
                 DeserializationError error = deserializeJson(doc, payload);
 
-                if (!error) {
-                    if (doc["Body"]["Data"].containsKey("Site")) {
-                        long gridPower = doc["Body"]["Data"]["Site"]["P_Grid"];
-                        gDisplayValues.watt = gridPower;
-                        gDisplayValues.froniusup = true;
-                    }
+                if (!error && doc["Head"]["Status"]["Code"] == 0 && doc["Body"]["Data"].containsKey("Site")) {
 
-                    if (doc["Body"]["Data"]["Inverters"].containsKey("1")) {
-                        long generatedPower = doc["Body"]["Data"]["Inverters"]["1"]["P"];
-                        gDisplayValues.production = generatedPower;
+                    JsonObject site = doc["Body"]["Data"]["Site"];
+
+                    // Fronius production power
+                    long generatedPower = 0;
+                    if (!site["P_PV"].isNull()) {
+                        generatedPower = site["P_PV"];
+                    } else if (doc["Body"]["Data"]["Inverters"].containsKey("1")) {
+                        generatedPower = doc["Body"]["Data"]["Inverters"]["1"]["P"];
                     }
+                    gDisplayValues.production = generatedPower;
+
+                    // House consumption (positive value)
+                    long loadPower = site["P_Load"] | 0;
+                    gDisplayValues.watt = abs(loadPower);
+
+                    gDisplayValues.froniusup = true;
+
                 } else {
-                    Serial.println("Fronius JSON error");
+                    Serial.println("Fronius JSON error or invalid status");
+                    gDisplayValues.production = 0;
                 }
             } else {
                 Serial.println("Fronius API unavailable");
+                gDisplayValues.production = 0;
             }
 
             http.end();
