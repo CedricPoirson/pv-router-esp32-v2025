@@ -356,47 +356,47 @@ static void drawTTGOZeroGridDashboard()
   display.setTextSize(1);
 
   display.setTextFont(2);
-  drawSunIcon(2, 72, TFT_YELLOW);
+  drawSunIcon(2, 69, TFT_YELLOW);
   display.setTextColor(TFT_GREEN, TFT_BLACK);
-  display.setCursor(20, 73, 2);
+  display.setCursor(20, 70, 2);
   display.print("PV ");
   display.print(formatPowerTTGO((int)gDisplayValues.production));
 
   if (grid < 0) {
-    drawGridArrowIcon(119, 74, true, TFT_CYAN);
+    drawGridArrowIcon(119, 71, true, TFT_CYAN);
     display.setTextColor(TFT_CYAN, TFT_BLACK);
-    display.setCursor(135, 73, 2);
+    display.setCursor(135, 70, 2);
     display.print("EXP ");
     display.print(formatPowerTTGO(-grid));
   }
   else {
-    drawGridArrowIcon(119, 74, false, TFT_RED);
+    drawGridArrowIcon(119, 71, false, TFT_RED);
     display.setTextColor(TFT_RED, TFT_BLACK);
-    display.setCursor(135, 73, 2);
+    display.setCursor(135, 70, 2);
     display.print("IMP ");
     display.print(formatPowerTTGO(grid));
   }
 
-  drawHeaterIcon(2, 94, TFT_ORANGE);
-  display.setCursor(20, 95, 2);
+  drawHeaterIcon(2, 90, TFT_ORANGE);
+  display.setCursor(20, 91, 2);
   display.setTextColor(TFT_WHITE, TFT_BLACK);
   display.printf("CE %d%%", reportedDimmer);
-  display.setCursor(87, 95, 2);
+  display.setCursor(87, 91, 2);
   display.printf("%dW", heaterPower);
 
   if (heaterAtTempLimit) {
-    display.setCursor(133, 95, 2);
+    display.setCursor(133, 91, 2);
     display.setTextColor(TFT_ORANGE, TFT_BLACK);
     display.print("TEMP MAX");
   }
   else if (dimmerFresh && !dimmerSynced) {
-    display.setCursor(145, 95, 2);
+    display.setCursor(145, 91, 2);
     display.setTextColor(TFT_YELLOW, TFT_BLACK);
     display.print("SYNC");
   }
   else if (gDisplayValues.froniusup) {
-    drawHouseIcon(133, 94, TFT_WHITE);
-    display.setCursor(151, 95, 2);
+    drawHouseIcon(133, 90, TFT_WHITE);
+    display.setCursor(151, 91, 2);
     display.setTextColor(TFT_WHITE, TFT_BLACK);
     display.print(formatPowerTTGO(housePower));
   }
