@@ -12,8 +12,8 @@ enum DEVICE_STATE {
   UP,
 };
 
-// Place to store all the variables that need to be displayed.
-// All other functions should update these!
+// Place to store all the variables that need to be displayed / shared
+// between the router tasks.
 struct DisplayValues {
   double watt;
   double amps;
@@ -21,16 +21,32 @@ struct DisplayValues {
   DEVICE_STATE currentState;
   String IP;
   String time;
-  bool injection; 
+  bool injection;
   int dimmer;
-  int security; 
+  int security;
   int change;
   bool task;
-  bool porteuse; 
-  bool screenstate; 
+  bool porteuse;
+  bool screenstate;
   String temperature;
   double production;
+
+  // Fronius health. froniusLastOkMs is refreshed only after a valid JSON
+  // response containing Site/P_Grid.
   bool froniusup;
+  uint32_t froniusLastOkMs;
+
+  // Remote RobotDyn dimmer telemetry returned by GET /state.
+  bool dimmerOnline;
+  bool dimmerOn;
+  bool dimmerAlarm;
+  int dimmerApplied;
+  int dimmerCommand;
+  float dimmerPower;
+  float dimmerPtotal;
+  int dimmerRssi;
+  String dimmerAlert;
+  String dimmerVersion;
 };
 
 struct Config {
@@ -57,9 +73,9 @@ struct Config {
   int IDXdimmer;
   int tmax;
   int resistance;
-  bool polarity; 
+  bool polarity;
   char Publish[100];
-  int  ScreenTime;
+  int ScreenTime;
 };
 
 struct Configwifi {
