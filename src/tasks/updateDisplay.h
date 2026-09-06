@@ -97,6 +97,14 @@ static void drawHeaterIcon(int x, int y, int color)
   display.drawLine(x + 10, y + 3, x + 12, y + 10, color);
 }
 
+static void drawHouseIcon(int x, int y, int color)
+{
+  display.drawLine(x, y + 6, x + 7, y, color);
+  display.drawLine(x + 7, y, x + 14, y + 6, color);
+  display.drawRect(x + 2, y + 6, 10, 7, color);
+  display.drawRect(x + 6, y + 9, 3, 4, color);
+}
+
 static void drawClockIcon(int x, int y, int color)
 {
   display.drawCircle(x + 6, y + 6, 6, color);
@@ -166,6 +174,11 @@ static void drawTTGOZeroGridDashboard()
   const int heaterPower = (800 * reportedDimmer) / 100;
   const int grid = (int)gDisplayValues.grid;
   const float waterTemp = gDisplayValues.temperature.toFloat();
+
+  // Fronius convention: P_Grid > 0 import, P_Grid < 0 export.
+  // Household consumption therefore equals PV production + P_Grid.
+  int housePower = (int)gDisplayValues.production + grid;
+  if (housePower < 0) housePower = 0;
 
   // config.tmax is loaded from the router configuration (for example 55 C).
   const bool tempAtOrAboveMax =
@@ -275,7 +288,7 @@ static void drawTTGOZeroGridDashboard()
     display.print(formatPowerTTGO(grid));
   }
 
-  drawHeaterIcon(2, 98, heaterAtTempLimit ? TFT_ORANGE : TFT_ORANGE);
+  drawHeaterIcon(2, 98, TFT_ORANGE);
   display.setCursor(20, 99, 2);
   display.setTextColor(TFT_WHITE, TFT_BLACK);
   display.printf("CE %d%%", reportedDimmer);
@@ -291,6 +304,12 @@ static void drawTTGOZeroGridDashboard()
     display.setCursor(145, 99, 2);
     display.setTextColor(TFT_YELLOW, TFT_BLACK);
     display.print("SYNC");
+  }
+  else if (gDisplayValues.froniusup) {
+    drawHouseIcon(133, 98, TFT_WHITE);
+    display.setCursor(151, 99, 2);
+    display.setTextColor(TFT_WHITE, TFT_BLACK);
+    display.print(formatPowerTTGO(housePower));
   }
 
   // -------- Family-facing recommendation --------
