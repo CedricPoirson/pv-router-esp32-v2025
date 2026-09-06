@@ -2,14 +2,14 @@
 #define FRONIUS_ZERO_GRID_H
 
 // Fronius Zero Grid controller
-// V9 - real dimmer command preparation
+// V10 - adaptive real dimmer command
 
 #include "config/enums.h"
 
 #define FRONIUS_GRID_MARGIN_W 20
 #define FRONIUS_HEATER_POWER_W 800
 #define FRONIUS_MAX_DIMMER 100
-#define FRONIUS_STEP_FAST 15
+#define FRONIUS_STEP_FAST 20
 #define FRONIUS_STEP_SLOW 5
 
 extern DisplayValues gDisplayValues;
@@ -21,9 +21,9 @@ void froniusZeroGridSimulation()
     int grid = (int)gDisplayValues.grid;
     int production = (int)gDisplayValues.production;
     int dimmer = gDisplayValues.dimmer;
-    int surplus = 0;
     int targetDimmer = dimmer;
     int correction = 0;
+    int surplus = 0;
 
     if (grid < -FRONIUS_GRID_MARGIN_W) {
         surplus = abs(grid);
@@ -34,7 +34,10 @@ void froniusZeroGridSimulation()
 
         int delta = targetDimmer - dimmer;
 
-        if (abs(delta) > 40)
+        // Charge saturated: go immediately to maximum
+        if (targetDimmer == FRONIUS_MAX_DIMMER && dimmer < FRONIUS_MAX_DIMMER)
+            correction = FRONIUS_STEP_FAST;
+        else if (abs(delta) > 40)
             correction = (delta > 0) ? FRONIUS_STEP_FAST : -FRONIUS_STEP_FAST;
         else if (abs(delta) > 10)
             correction = (delta > 0) ? FRONIUS_STEP_SLOW : -FRONIUS_STEP_SLOW;
@@ -42,6 +45,7 @@ void froniusZeroGridSimulation()
             correction = delta;
     }
     else if (grid > FRONIUS_GRID_MARGIN_W) {
+        // Fast protection when a cloud arrives and power is imported
         correction = -FRONIUS_STEP_FAST;
     }
 
@@ -50,11 +54,10 @@ void froniusZeroGridSimulation()
     if (dimmer < 0) dimmer = 0;
     if (dimmer > FRONIUS_MAX_DIMMER) dimmer = FRONIUS_MAX_DIMMER;
 
-    // gDisplayValues.dimmer is now the real command value
     gDisplayValues.dimmer = dimmer;
 
     Serial.println();
-    Serial.println("========== FRONIUS ZERO GRID V9 ==========");
+    Serial.println("========== FRONIUS ZERO GRID V10 ==========");
     Serial.printf("PV production : %d W\n", production);
     Serial.printf("Grid exchange : %d W\n", grid);
     Serial.printf("Heater max    : %d W\n", FRONIUS_HEATER_POWER_W);
