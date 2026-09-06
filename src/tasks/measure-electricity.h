@@ -4,19 +4,16 @@
 #include <Arduino.h>
 #include "config/config.h"
 #include "config/enums.h"
-#include "mqtt-aws.h"
-#include "mqtt-home-assistant.h"
 #include "functions/energyFunctions.h"
 #include "functions/dimmerFunction.h"
 #include "functions/drawFunctions.h"
+#include "functions/Mqtt_http_Functions.h"
 
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 
 extern DisplayValues gDisplayValues;
 extern Config config;
-
-int Pow_mqtt_send = 0;
 
 // Incremented only after a complete, validated PowerFlow sample has been
 // written to gDisplayValues. The dimmer task reacts once per fresh sample.
@@ -99,11 +96,12 @@ void measureElectricityf(void * parameter)
         froniusStateKnown = true;
         previousFroniusOk = validFroniusSample;
 
-        Pow_mqtt_send++;
-        if (Pow_mqtt_send > 10) {
-            Mqtt_send(String(config.IDX), String(int(gDisplayValues.grid)));
-            Pow_mqtt_send = 0;
-        }
+#if MQTT_CLIENT == true
+        // Publish one coherent retained JSON state after every Fronius poll.
+        // This also exposes Fronius OFFLINE transitions without extra HTTP
+        // requests or an independent MQTT timer.
+        Mqtt_publishState();
+#endif
 #endif
 
         // Fronius Solar API realtime calls: one PowerFlow request every ~4 s.
