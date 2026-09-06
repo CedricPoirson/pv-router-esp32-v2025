@@ -3,8 +3,6 @@
 
 #include <Arduino.h>
 
-// The state in which the device can be. This mainly affects what
-// is drawn on the display.
 enum DEVICE_STATE {
   CONNECTING_WIFI,
   CONNECTING_AWS,
@@ -12,8 +10,6 @@ enum DEVICE_STATE {
   UP,
 };
 
-// Place to store all the variables that need to be displayed.
-// All other functions should update these!
 struct DisplayValues {
   double watt;
   double amps;
@@ -22,14 +18,12 @@ struct DisplayValues {
   String IP;
   String time;
 
-  // Energy
   bool injection;
   double injectionPower;
   double gridPower;
   double todayPV;
   double tomorrowPV;
 
-  // Existing functions
   int dimmer;
   int security;
   int change;
@@ -37,13 +31,13 @@ struct DisplayValues {
   bool porteuse;
   bool screenstate;
 
-  // Additional display data
   String temperature;
   float piscineTemp;
   bool pompePiscine;
   bool machinePossible;
 
   double production;
+  double surplus;
   bool froniusup;
 };
 
