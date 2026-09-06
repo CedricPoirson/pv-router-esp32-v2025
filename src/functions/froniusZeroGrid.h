@@ -2,7 +2,7 @@
 #define FRONIUS_ZERO_GRID_H
 
 // Fronius Zero Grid controller
-// V13.2 - V12.2 regulation + dimmer command/actual resynchronisation
+// V13.3 - regulate from actual dimmer state when fresh + command resync
 // Positive P_Grid = import from grid
 // Negative P_Grid = export to grid
 
@@ -63,17 +63,33 @@ bool sendDimmerPower(int power)
 void froniusZeroGridSimulation()
 {
     const int grid = (int)gDisplayValues.grid;
-    const int dimmer = gDisplayValues.dimmer;
+    const int commandedDimmer = gDisplayValues.dimmer;
+    const unsigned long now = millis();
 
-    int targetDimmer = dimmer;
-    int targetHeaterPower = (FRONIUS_HEATER_POWER_W * dimmer) / 100;
+    int reportedDimmer = gDisplayValues.dimmerReported;
+    if (reportedDimmer < 0) reportedDimmer = 0;
+    if (reportedDimmer > 100) reportedDimmer = 100;
+
+    const bool dimmerStateFresh =
+        gDisplayValues.dimmerCommOk &&
+        gDisplayValues.dimmerLastOkMs > 0 &&
+        ((unsigned long)(now - gDisplayValues.dimmerLastOkMs) <= DIMMER_STATE_FRESH_MS);
+
+    // P_Grid already contains the real heater consumption. Therefore the
+    // incremental controller must start from the heater power that is really
+    // applied, not from an old command that may still be waiting to sync.
+    const int controlDimmer = dimmerStateFresh ? reportedDimmer : commandedDimmer;
+
+    int targetDimmer = controlDimmer;
+    int targetHeaterPower = (FRONIUS_HEATER_POWER_W * controlDimmer) / 100;
     int powerCorrection = 0;
 
     const int gridLow = FRONIUS_GRID_TARGET_W - FRONIUS_GRID_DEADBAND_W;
     const int gridHigh = FRONIUS_GRID_TARGET_W + FRONIUS_GRID_DEADBAND_W;
 
     if (grid < gridLow || grid > gridHigh) {
-        const int currentHeaterPower = (FRONIUS_HEATER_POWER_W * dimmer) / 100;
+        const int currentHeaterPower =
+            (FRONIUS_HEATER_POWER_W * controlDimmer) / 100;
 
         powerCorrection = FRONIUS_GRID_TARGET_W - grid;
         targetHeaterPower = currentHeaterPower + powerCorrection;
@@ -91,17 +107,6 @@ void froniusZeroGridSimulation()
     if (targetDimmer > FRONIUS_MAX_DIMMER) targetDimmer = FRONIUS_MAX_DIMMER;
 
     gDisplayValues.dimmer = targetDimmer;
-
-    const unsigned long now = millis();
-
-    int reportedDimmer = gDisplayValues.dimmerReported;
-    if (reportedDimmer < 0) reportedDimmer = 0;
-    if (reportedDimmer > 100) reportedDimmer = 100;
-
-    const bool dimmerStateFresh =
-        gDisplayValues.dimmerCommOk &&
-        gDisplayValues.dimmerLastOkMs > 0 &&
-        ((unsigned long)(now - gDisplayValues.dimmerLastOkMs) <= DIMMER_STATE_FRESH_MS);
 
     const bool dimmerMismatch =
         dimmerStateFresh &&
@@ -148,9 +153,10 @@ void froniusZeroGridSimulation()
                 dimmerMismatchSinceMs = now;
 
             if (valueChanged) {
-                Serial.printf("[DIMMER] %d%% -> %d%% (GRID=%d W)\n",
-                              previousSentDimmer < 0 ? dimmer : previousSentDimmer,
+                Serial.printf("[DIMMER] %d%% -> %d%% (ACTUAL=%d%% GRID=%d W)\n",
+                              previousSentDimmer < 0 ? commandedDimmer : previousSentDimmer,
                               gDisplayValues.dimmer,
+                              controlDimmer,
                               grid);
             }
         }
@@ -159,7 +165,8 @@ void froniusZeroGridSimulation()
     int zeroGridState = ZERO_GRID_HOLD;
 
     if (grid < gridLow) {
-        if (dimmer >= FRONIUS_MAX_DIMMER && targetDimmer >= FRONIUS_MAX_DIMMER)
+        if (controlDimmer >= FRONIUS_MAX_DIMMER &&
+            targetDimmer >= FRONIUS_MAX_DIMMER)
             zeroGridState = ZERO_GRID_LOAD_LIMITED;
         else
             zeroGridState = ZERO_GRID_SURPLUS;
