@@ -17,6 +17,7 @@ enum DEVICE_STATE {
 struct DisplayValues {
   double watt;
   double amps;
+  double grid;
   int8_t wifi_strength;
   DEVICE_STATE currentState;
   String IP;
