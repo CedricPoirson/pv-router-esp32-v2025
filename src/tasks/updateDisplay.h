@@ -189,14 +189,14 @@ static void drawPowerGaugeTTGO(int watts, bool valid)
   display.fillRect(xThreeKw, y, xMax - xThreeKw + 1, height, TFT_CYAN);
 
   display.drawRect(x, y, width, height, TFT_WHITE);
-  display.drawFastVLine(xZero, y - 2, height + 4, TFT_WHITE);
+
+  // Zero remains visible but deliberately subdued so the moving cursor wins.
+  display.drawFastVLine(xZero, y - 2, height + 4, TFT_DARKGREY);
 
   if (valid) {
     const int markerX = gaugeXForPowerTTGO(watts);
 
-    // Large solid cursor: a wide white arrow on black plus a 3 px line
-    // through the coloured gauge. Deliberately no dark centre so it remains
-    // obvious from a distance on every colour zone.
+    // Large solid cursor: a wide white arrow plus a 3 px line through the gauge.
     display.fillTriangle(markerX - 7, y - 10,
                          markerX + 7, y - 10,
                          markerX, y - 1,
@@ -272,12 +272,19 @@ static void drawTTGOZeroGridDashboard()
       dimmerFresh &&
       (abs(commandedDimmer - reportedDimmer) <= 2);
 
+  // Display-only neutral zone. It does not change the Zero Grid regulation.
+  const int gridDisplayNeutralW = 20;
+  const bool importing =
+      gDisplayValues.froniusup && (grid > gridDisplayNeutralW);
+  const bool exporting =
+      gDisplayValues.froniusup && (grid < -gridDisplayNeutralW);
+
   int availablePower = heaterPower - grid;
   if (availablePower < 0) availablePower = 0;
 
   int gaugePower = 0;
   if (gDisplayValues.froniusup) {
-    gaugePower = (grid > 0) ? -grid : availablePower;
+    gaugePower = importing ? -grid : availablePower;
   }
 
   display.setTextFont(2);
@@ -328,7 +335,6 @@ static void drawTTGOZeroGridDashboard()
     display.print("CE OK");
   }
 
-  const bool importing = gDisplayValues.froniusup && (grid > 0);
   drawCenteredTTGO(importing ? "IMPORT" : "DISPO",
                    20,
                    2,
@@ -362,19 +368,24 @@ static void drawTTGOZeroGridDashboard()
   display.print("PV ");
   display.print(formatPowerTTGO((int)gDisplayValues.production));
 
-  if (grid < 0) {
+  if (exporting) {
     drawGridArrowIcon(119, 71, true, TFT_CYAN);
     display.setTextColor(TFT_CYAN, TFT_BLACK);
     display.setCursor(135, 70, 2);
     display.print("EXP ");
     display.print(formatPowerTTGO(-grid));
   }
-  else {
+  else if (importing) {
     drawGridArrowIcon(119, 71, false, TFT_RED);
     display.setTextColor(TFT_RED, TFT_BLACK);
     display.setCursor(135, 70, 2);
     display.print("IMP ");
     display.print(formatPowerTTGO(grid));
+  }
+  else {
+    display.setTextColor(TFT_WHITE, TFT_BLACK);
+    display.setCursor(135, 70, 2);
+    display.print("GRID 0 W");
   }
 
   drawHeaterIcon(2, 90, TFT_ORANGE);
