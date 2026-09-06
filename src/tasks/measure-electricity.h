@@ -12,7 +12,7 @@
 
 // Fronius Inverter
 #include "HTTPClient.h"
-#include <ArduinoJson.h>  // Make sure this is included for JSON handling
+#include <ArduinoJson.h>
 
 extern DisplayValues gDisplayValues;
 extern Config config; 
@@ -57,7 +57,8 @@ void measureElectricityf(void * parameter)
                 error = deserializeJson(doc2, payload2);
 
                 long generatedPower2 = doc2["Body"]["Data"]["Site"]["P_Grid"];
-                gDisplayValues.watt  =  generatedPower2;
+                gDisplayValues.watt = generatedPower2;
+                gDisplayValues.grid = generatedPower2;
                 gDisplayValues.froniusup = true;
             #else
                 gDisplayValues.froniusup = false;
@@ -69,6 +70,8 @@ void measureElectricityf(void * parameter)
             Serial.println(gDisplayValues.production);
             Serial.print("gDisplayValues.watt / function measure: ");
             Serial.println(gDisplayValues.watt);
+            Serial.print("gDisplayValues.grid / function measure: ");
+            Serial.println(gDisplayValues.grid);
             Serial.print("gDisplayValues.froniusup / function measure: ");
             Serial.println(gDisplayValues.froniusup);
         #endif
@@ -83,7 +86,7 @@ void measureElectricityf(void * parameter)
             }
         #endif
         
-        vTaskDelay(2000 / portTICK_PERIOD_MS);  // Delay for 2 seconds to avoid overloading the system
+        vTaskDelay(2000 / portTICK_PERIOD_MS);
     }    
 }
 
