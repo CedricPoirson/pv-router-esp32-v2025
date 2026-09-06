@@ -153,19 +153,44 @@ static void drawTTGOZeroGridDashboard()
       gDisplayValues.dimmerLastOkMs > 0 &&
       ((unsigned long)(now - gDisplayValues.dimmerLastOkMs) <= 45000UL);
 
-  // Use the power actually reported by the dimmer when its /state endpoint
-  // is fresh. If communication is lost, only the current grid export is
-  // counted as available power so the displayed value stays conservative.
+  // Power actually reported by the remote dimmer.
+  // If its state is stale, do not count heater power as releasable capacity.
   int reportedDimmer = dimmerFresh ? gDisplayValues.dimmerReported : 0;
   if (reportedDimmer < 0) reportedDimmer = 0;
   if (reportedDimmer > 100) reportedDimmer = 100;
 
+  int commandedDimmer = gDisplayValues.dimmer;
+  if (commandedDimmer < 0) commandedDimmer = 0;
+  if (commandedDimmer > 100) commandedDimmer = 100;
+
   const int heaterPower = (800 * reportedDimmer) / 100;
   const int grid = (int)gDisplayValues.grid;
+  const float waterTemp = gDisplayValues.temperature.toFloat();
+
+  // config.tmax is loaded from the router configuration (for example 55 C).
+  const bool tempAtOrAboveMax =
+      (waterTemp > 0.0f) &&
+      (config.tmax > 0) &&
+      (waterTemp >= (float)config.tmax);
+
+  // Strong indication that the dimmer's own temperature protection has
+  // deliberately stopped the heater: the router is asking for power, the
+  // dimmer answers normally, but reports 0 % while the water is at Tmax.
+  const bool heaterAtTempLimit =
+      dimmerFresh &&
+      tempAtOrAboveMax &&
+      (commandedDimmer > 0) &&
+      (reportedDimmer == 0);
+
+  // Outside the temperature-cutoff case, a difference between requested and
+  // reported dimmer power is shown as CE SYNC rather than falsely saying OK.
+  const bool dimmerSynced =
+      dimmerFresh &&
+      (abs(commandedDimmer - reportedDimmer) <= 2);
 
   // Extra household load that can be switched on without importing:
-  // present grid export plus power that can be released by reducing the
-  // water-heater dimmer. With a lost dimmer link, heaterPower is forced to 0.
+  // present grid export plus power that can actually be released from the
+  // water heater. If the thermostat has already stopped it, heaterPower is 0.
   int availablePower = heaterPower - grid;
   if (availablePower < 0) availablePower = 0;
 
@@ -177,16 +202,17 @@ static void drawTTGOZeroGridDashboard()
   if (clockText.length() >= 5) clockText = clockText.substring(0, 5);
   display.print(clockText);
 
-  float waterTemp = gDisplayValues.temperature.toFloat();
-  drawThermometerIcon(59, 1, TFT_CYAN);
-  display.setTextColor(TFT_WHITE, TFT_BLACK);
+  const int tempColor = tempAtOrAboveMax ? TFT_ORANGE : TFT_CYAN;
+  drawThermometerIcon(59, 1, tempColor);
+  display.setTextColor(tempAtOrAboveMax ? TFT_ORANGE : TFT_WHITE, TFT_BLACK);
   if (waterTemp > 0.0f) {
     String tempText = String(waterTemp, 1);
     const int tempX = 73;
     display.setCursor(tempX, 2, 2);
     display.print(tempText);
     const int tempWidth = display.textWidth(tempText, 2);
-    display.drawCircle(tempX + tempWidth + 3, 4, 1, TFT_WHITE);
+    display.drawCircle(tempX + tempWidth + 3, 4, 1,
+                       tempAtOrAboveMax ? TFT_ORANGE : TFT_WHITE);
     display.setCursor(tempX + tempWidth + 7, 2, 2);
     display.print("C");
   }
@@ -195,17 +221,23 @@ static void drawTTGOZeroGridDashboard()
     display.print("--.- C");
   }
 
-  if (dimmerFresh) {
-    drawCheckIcon(174, 2, TFT_GREEN);
-    display.setTextColor(TFT_GREEN, TFT_BLACK);
-    display.setCursor(190, 2, 2);
-    display.print("CE OK");
-  }
-  else {
+  if (!dimmerFresh) {
     drawErrorIcon(174, 2, TFT_RED);
     display.setTextColor(TFT_RED, TFT_BLACK);
     display.setCursor(190, 2, 2);
     display.print("CE ERR");
+  }
+  else if (!dimmerSynced && !heaterAtTempLimit) {
+    drawClockIcon(174, 2, TFT_YELLOW);
+    display.setTextColor(TFT_YELLOW, TFT_BLACK);
+    display.setCursor(190, 2, 2);
+    display.print("CE SYNC");
+  }
+  else {
+    drawCheckIcon(174, 2, TFT_GREEN);
+    display.setTextColor(TFT_GREEN, TFT_BLACK);
+    display.setCursor(190, 2, 2);
+    display.print("CE OK");
   }
 
   // -------- Main information: power available for another appliance --------
@@ -243,12 +275,23 @@ static void drawTTGOZeroGridDashboard()
     display.print(formatPowerTTGO(grid));
   }
 
-  drawHeaterIcon(2, 98, TFT_ORANGE);
+  drawHeaterIcon(2, 98, heaterAtTempLimit ? TFT_ORANGE : TFT_ORANGE);
   display.setCursor(20, 99, 2);
   display.setTextColor(TFT_WHITE, TFT_BLACK);
   display.printf("CE %d%%", reportedDimmer);
   display.setCursor(87, 99, 2);
   display.printf("%dW", heaterPower);
+
+  if (heaterAtTempLimit) {
+    display.setCursor(133, 99, 2);
+    display.setTextColor(TFT_ORANGE, TFT_BLACK);
+    display.print("TEMP MAX");
+  }
+  else if (dimmerFresh && !dimmerSynced) {
+    display.setCursor(145, 99, 2);
+    display.setTextColor(TFT_YELLOW, TFT_BLACK);
+    display.print("SYNC");
+  }
 
   // -------- Family-facing recommendation --------
   String advice;
