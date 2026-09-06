@@ -21,6 +21,8 @@ extern DisplayValues gDisplayValues;
 
 #ifdef TTGO
 
+// Page 0 = family dashboard, page 1 = diagnostics.
+// switchDisplay.h changes these values after a button press.
 volatile uint8_t gDisplayPage = 0;
 volatile bool gDisplayForceRefresh = true;
 
@@ -76,6 +78,8 @@ static void drawDiagnosticRowTTGO(const String &label,
   display.print(value);
 }
 
+// Slightly enlarged vector icons for better readability on the 240x135 TTGO.
+// No special font or bitmap is required.
 static void drawThermometerIcon(int x, int y, int color)
 {
   display.drawRoundRect(x + 2, y, 5, 11, 2, color);
@@ -178,7 +182,6 @@ static void drawPowerGaugeTTGO(int watts, bool valid)
   const int xThreeKw = gaugeXForPowerTTGO(3000);
   const int xMax = x + width - 1;
 
-  // Fixed colour zones make the signed -2..+6 kW scale readable at a glance.
   display.fillRect(x, y, xMinus500 - x, height, TFT_RED);
   display.fillRect(xMinus500, y, xZero - xMinus500, height, TFT_ORANGE);
   display.fillRect(xZero, y, xOneKw - xZero, height, TFT_YELLOW);
@@ -186,14 +189,11 @@ static void drawPowerGaugeTTGO(int watts, bool valid)
   display.fillRect(xThreeKw, y, xMax - xThreeKw + 1, height, TFT_CYAN);
 
   display.drawRect(x, y, width, height, TFT_WHITE);
-
-  // Make zero especially obvious: left = grid import, right = available power.
   display.drawFastVLine(xZero, y - 2, height + 4, TFT_WHITE);
 
   if (valid) {
     const int markerX = gaugeXForPowerTTGO(watts);
 
-    // High-contrast cursor: white outline + black core, visible on every zone.
     display.drawFastVLine(markerX - 2, y - 2, height + 3, TFT_WHITE);
     display.drawFastVLine(markerX + 2, y - 2, height + 3, TFT_WHITE);
     display.fillRect(markerX - 1, y - 2, 3, height + 3, TFT_BLACK);
@@ -275,9 +275,6 @@ static void drawTTGOZeroGridDashboard()
       dimmerFresh &&
       (abs(commandedDimmer - reportedDimmer) <= 2);
 
-  // Positive value = extra load that can be added after releasing current CE
-  // power. During actual grid import the gauge deliberately goes negative so
-  // the family display immediately shows that electricity is being purchased.
   int availablePower = heaterPower - grid;
   if (availablePower < 0) availablePower = 0;
 
@@ -312,7 +309,6 @@ static void drawTTGOZeroGridDashboard()
     display.print("--.- C");
   }
 
-  // Keep status far enough from the right edge to avoid TFT text wrapping.
   const int ceIconX = 164;
   const int ceTextX = 180;
 
@@ -363,47 +359,47 @@ static void drawTTGOZeroGridDashboard()
   display.setTextSize(1);
 
   display.setTextFont(2);
-  drawSunIcon(2, 76, TFT_YELLOW);
+  drawSunIcon(2, 72, TFT_YELLOW);
   display.setTextColor(TFT_GREEN, TFT_BLACK);
-  display.setCursor(20, 77, 2);
+  display.setCursor(20, 73, 2);
   display.print("PV ");
   display.print(formatPowerTTGO((int)gDisplayValues.production));
 
   if (grid < 0) {
-    drawGridArrowIcon(119, 78, true, TFT_CYAN);
+    drawGridArrowIcon(119, 74, true, TFT_CYAN);
     display.setTextColor(TFT_CYAN, TFT_BLACK);
-    display.setCursor(135, 77, 2);
+    display.setCursor(135, 73, 2);
     display.print("EXP ");
     display.print(formatPowerTTGO(-grid));
   }
   else {
-    drawGridArrowIcon(119, 78, false, TFT_RED);
+    drawGridArrowIcon(119, 74, false, TFT_RED);
     display.setTextColor(TFT_RED, TFT_BLACK);
-    display.setCursor(135, 77, 2);
+    display.setCursor(135, 73, 2);
     display.print("IMP ");
     display.print(formatPowerTTGO(grid));
   }
 
-  drawHeaterIcon(2, 98, TFT_ORANGE);
-  display.setCursor(20, 99, 2);
+  drawHeaterIcon(2, 94, TFT_ORANGE);
+  display.setCursor(20, 95, 2);
   display.setTextColor(TFT_WHITE, TFT_BLACK);
   display.printf("CE %d%%", reportedDimmer);
-  display.setCursor(87, 99, 2);
+  display.setCursor(87, 95, 2);
   display.printf("%dW", heaterPower);
 
   if (heaterAtTempLimit) {
-    display.setCursor(133, 99, 2);
+    display.setCursor(133, 95, 2);
     display.setTextColor(TFT_ORANGE, TFT_BLACK);
     display.print("TEMP MAX");
   }
   else if (dimmerFresh && !dimmerSynced) {
-    display.setCursor(145, 99, 2);
+    display.setCursor(145, 95, 2);
     display.setTextColor(TFT_YELLOW, TFT_BLACK);
     display.print("SYNC");
   }
   else if (gDisplayValues.froniusup) {
-    drawHouseIcon(133, 98, TFT_WHITE);
-    display.setCursor(151, 99, 2);
+    drawHouseIcon(133, 94, TFT_WHITE);
+    display.setCursor(151, 95, 2);
     display.setTextColor(TFT_WHITE, TFT_BLACK);
     display.print(formatPowerTTGO(housePower));
   }
@@ -474,9 +470,6 @@ static void drawTTGODiagnosticPage()
 
 #endif
 
-/**
- * Draw the current status on the attached display.
- */
 void updateDisplay(void * parameter){
 #ifdef TTGO
   unsigned long lastDrawMs = 0;
