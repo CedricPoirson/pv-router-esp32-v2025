@@ -13,12 +13,18 @@ extern SSD1306Wire display;
 
 #ifdef TTGO
 #include <TFT_eSPI.h>
+#include <WiFi.h>
 extern TFT_eSPI display;
 #endif
 
 extern DisplayValues gDisplayValues;
 
 #ifdef TTGO
+
+// Page 0 = family dashboard, page 1 = diagnostics.
+// switchDisplay.h changes these values after a button press.
+volatile uint8_t gDisplayPage = 0;
+volatile bool gDisplayForceRefresh = true;
 
 static String formatPowerTTGO(int watts)
 {
@@ -31,6 +37,20 @@ static String formatPowerTTGO(int watts)
   return String(watts) + " W";
 }
 
+static String formatUptimeTTGO(unsigned long uptimeMs)
+{
+  const unsigned long totalMinutes = uptimeMs / 60000UL;
+  const unsigned long days = totalMinutes / 1440UL;
+  const unsigned long hours = (totalMinutes / 60UL) % 24UL;
+  const unsigned long minutes = totalMinutes % 60UL;
+
+  if (days > 0) {
+    return String(days) + "j " + String(hours) + "h";
+  }
+
+  return String(hours) + "h " + String(minutes) + "m";
+}
+
 static void drawCenteredTTGO(const String &text, int y, int font, int color)
 {
   display.setTextFont(font);
@@ -40,6 +60,22 @@ static void drawCenteredTTGO(const String &text, int y, int font, int color)
   if (x < 0) x = 0;
   display.setCursor(x, y, font);
   display.print(text);
+}
+
+static void drawDiagnosticRowTTGO(const String &label,
+                                  const String &value,
+                                  int y,
+                                  int valueColor)
+{
+  display.setTextFont(2);
+  display.setTextSize(1);
+  display.setTextColor(TFT_WHITE, TFT_BLACK);
+  display.setCursor(3, y, 2);
+  display.print(label);
+
+  display.setTextColor(valueColor, TFT_BLACK);
+  display.setCursor(79, y, 2);
+  display.print(value);
 }
 
 // Slightly enlarged vector icons for better readability on the 240x135 TTGO.
@@ -344,20 +380,99 @@ static void drawTTGOZeroGridDashboard()
   drawAdviceTTGO(advice, adviceColor, adviceIcon);
 }
 
+static void drawTTGODiagnosticPage()
+{
+  display.fillScreen(TFT_BLACK);
+  display.setTextSize(1);
+
+  drawCenteredTTGO("DIAGNOSTIC V13", 1, 2, TFT_CYAN);
+  display.drawFastHLine(0, 18, 240, TFT_DARKGREY);
+
+  const unsigned long now = millis();
+  const bool dimmerFresh =
+      gDisplayValues.dimmerCommOk &&
+      gDisplayValues.dimmerLastOkMs > 0 &&
+      ((unsigned long)(now - gDisplayValues.dimmerLastOkMs) <= 45000UL);
+
+  const int rssi = WiFi.isConnected() ? WiFi.RSSI() : -127;
+  int wifiColor = TFT_RED;
+  if (rssi >= -60) wifiColor = TFT_GREEN;
+  else if (rssi >= -75) wifiColor = TFT_YELLOW;
+
+  drawDiagnosticRowTTGO("WiFi", String(rssi) + " dBm", 22, wifiColor);
+  drawDiagnosticRowTTGO("IP", gDisplayValues.IP, 38, TFT_WHITE);
+  drawDiagnosticRowTTGO("Fronius",
+                        gDisplayValues.froniusup ? "OK" : "ERREUR",
+                        54,
+                        gDisplayValues.froniusup ? TFT_GREEN : TFT_RED);
+
+  int commandedDimmer = gDisplayValues.dimmer;
+  if (commandedDimmer < 0) commandedDimmer = 0;
+  if (commandedDimmer > 100) commandedDimmer = 100;
+
+  int reportedDimmer = gDisplayValues.dimmerReported;
+  if (reportedDimmer < 0) reportedDimmer = 0;
+  if (reportedDimmer > 100) reportedDimmer = 100;
+
+  const String dimmerText = String(commandedDimmer) + "% > " +
+                            String(reportedDimmer) + "%";
+  drawDiagnosticRowTTGO("Dimmer",
+                        dimmerText,
+                        70,
+                        dimmerFresh ? TFT_GREEN : TFT_RED);
+
+  String linkAge = "jamais";
+  if (gDisplayValues.dimmerLastOkMs > 0) {
+    linkAge = String((unsigned long)(now - gDisplayValues.dimmerLastOkMs) / 1000UL) + " s";
+  }
+  drawDiagnosticRowTTGO("CE link",
+                        linkAge,
+                        86,
+                        dimmerFresh ? TFT_GREEN : TFT_RED);
+
+  const float waterTemp = gDisplayValues.temperature.toFloat();
+  const String temperatureText = String(config.tmax) + "C / " +
+                                 String(waterTemp, 1) + "C";
+  const int tempColor =
+      (waterTemp > 0.0f && config.tmax > 0 && waterTemp >= config.tmax)
+          ? TFT_ORANGE
+          : TFT_WHITE;
+  drawDiagnosticRowTTGO("Tmax/Eau", temperatureText, 102, tempColor);
+  drawDiagnosticRowTTGO("Uptime", formatUptimeTTGO(now), 118, TFT_WHITE);
+}
+
 #endif
 
 /**
  * Draw the current status on the attached display.
  */
 void updateDisplay(void * parameter){
-  for (;;){
-    serial_println(F("lcd task"));
-
 #ifdef TTGO
-    drawTTGOZeroGridDashboard();
+  unsigned long lastDrawMs = 0;
 #endif
 
-#ifdef DEVKIT1
+  for (;;){
+#ifdef TTGO
+    const unsigned long now = millis();
+    if (gDisplayForceRefresh ||
+        (unsigned long)(now - lastDrawMs) >= 5000UL) {
+      serial_println(F("lcd task"));
+      gDisplayForceRefresh = false;
+
+      if (gDisplayPage == 0)
+        drawTTGOZeroGridDashboard();
+      else
+        drawTTGODiagnosticPage();
+
+      lastDrawMs = now;
+    }
+
+    // Poll frequently so a short button press changes page immediately,
+    // while the actual TFT redraw remains at 5 s unless forced.
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+
+#elif defined(DEVKIT1)
+    serial_println(F("lcd task"));
     display.clear();
 
 #if WIFI_ACTIVE == true
@@ -376,10 +491,11 @@ void updateDisplay(void * parameter){
     drawtext16(55, 30, String(gDisplayValues.watt, 0) + " W");
     drawtext16(64, 48, String(gDisplayValues.dimmer) + " %");
     display.display();
-#endif
-
-    // Update every 5 seconds.
     vTaskDelay(5000 / portTICK_PERIOD_MS);
+
+#else
+    vTaskDelay(5000 / portTICK_PERIOD_MS);
+#endif
   }
 }
 
