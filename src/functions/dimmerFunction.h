@@ -6,6 +6,7 @@
 #include "../config/config.h"
 #include "../functions/spiffsFunctions.h"
 #include "../functions/Mqtt_http_Functions.h"
+#include <HTTPClient.h>
 
 #if DIMMERLOCAL 
 // Dimmer librairy 
