@@ -21,6 +21,7 @@ struct DisplayValues {
   bool injection;
   double injectionPower;
   double gridPower;
+  double grid;
   double todayPV;
   double tomorrowPV;
 
