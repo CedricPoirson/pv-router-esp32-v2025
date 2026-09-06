@@ -31,16 +31,24 @@ static String formatPowerTTGO(int watts)
   return String(watts) + " W";
 }
 
+static void drawCenteredTTGO(const String &text, int y, int font, int color)
+{
+  display.setTextFont(font);
+  display.setTextSize(1);
+  display.setTextColor(color, TFT_BLACK);
+  int x = (240 - display.textWidth(text, font)) / 2;
+  if (x < 0) x = 0;
+  display.setCursor(x, y, font);
+  display.print(text);
+}
+
 static void drawTTGOZeroGridDashboard()
 {
   display.fillScreen(TFT_BLACK);
   display.setTextSize(1);
 
   if (gDisplayValues.currentState != UP) {
-    display.setTextFont(4);
-    display.setTextColor(TFT_RED, TFT_BLACK);
-    display.setCursor(45, 48, 4);
-    display.print("NO WIFI");
+    drawCenteredTTGO("NO WIFI", 48, 4, TFT_RED);
     return;
   }
 
@@ -60,8 +68,9 @@ static void drawTTGOZeroGridDashboard()
   const int heaterPower = (800 * reportedDimmer) / 100;
   const int grid = (int)gDisplayValues.grid;
 
-  // Additional household load that can be switched on without importing:
-  // current grid export + power that can be released from the water heater.
+  // Extra household load that can be switched on without importing:
+  // present grid export plus power that can be released by reducing the
+  // water-heater dimmer. With a lost dimmer link, heaterPower is forced to 0.
   int availablePower = heaterPower - grid;
   if (availablePower < 0) availablePower = 0;
 
@@ -93,32 +102,26 @@ static void drawTTGOZeroGridDashboard()
   }
 
   // -------- Main information: power available for another appliance --------
-  display.setTextFont(2);
-  display.setTextColor(TFT_WHITE, TFT_BLACK);
-  display.setCursor(96, 23, 2);
-  display.print("DISPO");
+  drawCenteredTTGO("DISPO", 22, 2, TFT_WHITE);
 
   int availableColor = TFT_RED;
-  if (availablePower >= 2000) availableColor = TFT_GREEN;
-  else if (availablePower >= 1000) availableColor = TFT_YELLOW;
+  if (availablePower >= 2200) availableColor = TFT_GREEN;
+  else if (availablePower >= 500) availableColor = TFT_YELLOW;
 
-  display.setTextFont(4);
-  display.setTextColor(availableColor, TFT_BLACK);
   String availableText = gDisplayValues.froniusup
                            ? formatPowerTTGO(availablePower)
                            : String("---");
-  display.setCursor(55, 39, 4);
-  display.print(availableText);
+  drawCenteredTTGO(availableText, 38, 4, availableColor);
 
   // -------- Secondary information --------
   display.setTextFont(2);
   display.setTextColor(TFT_WHITE, TFT_BLACK);
-  display.setCursor(3, 78, 2);
+  display.setCursor(3, 77, 2);
   display.print("PV ");
   display.setTextColor(TFT_GREEN, TFT_BLACK);
   display.print(formatPowerTTGO((int)gDisplayValues.production));
 
-  display.setCursor(121, 78, 2);
+  display.setCursor(121, 77, 2);
   if (grid < 0) {
     display.setTextColor(TFT_CYAN, TFT_BLACK);
     display.print("EXP ");
@@ -130,38 +133,38 @@ static void drawTTGOZeroGridDashboard()
     display.print(formatPowerTTGO(grid));
   }
 
-  display.setCursor(3, 101, 2);
+  display.setCursor(3, 99, 2);
   display.setTextColor(TFT_WHITE, TFT_BLACK);
   display.printf("CE %d%%", reportedDimmer);
-  display.setCursor(64, 101, 2);
+  display.setCursor(73, 99, 2);
   display.printf("%dW", heaterPower);
 
-  // -------- Operational status --------
-  display.setCursor(118, 101, 2);
+  // -------- Simple family-facing recommendation --------
+  String advice;
+  int adviceColor;
+
   if (!gDisplayValues.froniusup) {
-    display.setTextColor(TFT_RED, TFT_BLACK);
-    display.print("FRONIUS ERR");
+    advice = "FRONIUS ERR";
+    adviceColor = TFT_RED;
   }
   else if (!dimmerFresh) {
-    display.setTextColor(TFT_RED, TFT_BLACK);
-    display.print("DIMMER ERR");
+    advice = "CE A VERIFIER";
+    adviceColor = TFT_RED;
   }
-  else if (grid > 20) {
-    display.setTextColor(TFT_RED, TFT_BLACK);
-    display.print("IMPORT");
+  else if (availablePower >= 2200) {
+    advice = "MACHINE OK";
+    adviceColor = TFT_GREEN;
   }
-  else if (reportedDimmer >= 100 && grid < -20) {
-    display.setTextColor(TFT_YELLOW, TFT_BLACK);
-    display.print("CHAUFFE MAX");
-  }
-  else if (grid < -20) {
-    display.setTextColor(TFT_GREEN, TFT_BLACK);
-    display.print("SURPLUS OK");
+  else if (availablePower >= 500) {
+    advice = "PETITE CHARGE";
+    adviceColor = TFT_YELLOW;
   }
   else {
-    display.setTextColor(TFT_GREEN, TFT_BLACK);
-    display.print("ZERO GRID");
+    advice = "ATTENDRE";
+    adviceColor = TFT_RED;
   }
+
+  drawCenteredTTGO(advice, 117, 2, adviceColor);
 }
 
 #endif
