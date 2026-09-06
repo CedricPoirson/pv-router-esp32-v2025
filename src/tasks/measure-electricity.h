@@ -22,6 +22,7 @@ void measureElectricityf(void * parameter)
 {
     static long lastLoadPower = 0;
     static long lastProduction = 0;
+    static long lastGridPower = 0;
 
     for(;;){
 
@@ -49,8 +50,7 @@ void measureElectricityf(void * parameter)
                     long generatedPower = lastProduction;
                     if (!site["P_PV"].isNull()) {
                         generatedPower = site["P_PV"];
-                    }
-                    else if (doc["Body"]["Data"]["Inverters"].containsKey("1")) {
+                    } else if (doc["Body"]["Data"]["Inverters"].containsKey("1")) {
                         generatedPower = doc["Body"]["Data"]["Inverters"]["1"]["P"];
                     }
 
@@ -65,22 +65,24 @@ void measureElectricityf(void * parameter)
                     lastLoadPower = loadPower;
                     gDisplayValues.watt = loadPower;
 
-                    gDisplayValues.surplus = gDisplayValues.production - gDisplayValues.watt;
-                    if (gDisplayValues.surplus < 0) {
-                        gDisplayValues.surplus = 0;
+                    long gridPower = lastGridPower;
+                    if (!site["P_Grid"].isNull()) {
+                        gridPower = (long)site["P_Grid"];
                     }
+
+                    lastGridPower = gridPower;
+                    gDisplayValues.grid = gridPower;
+
+                    // Surplus = injection réseau uniquement
+                    gDisplayValues.surplus = (gridPower < 0) ? abs(gridPower) : 0;
 
                     gDisplayValues.froniusup = true;
 
                 } else {
                     Serial.println("Fronius JSON error or invalid status");
-                    gDisplayValues.production = lastProduction;
-                    gDisplayValues.watt = lastLoadPower;
                 }
             } else {
                 Serial.println("Fronius API unavailable");
-                gDisplayValues.production = lastProduction;
-                gDisplayValues.watt = lastLoadPower;
             }
 
             http.end();
@@ -89,6 +91,8 @@ void measureElectricityf(void * parameter)
             Serial.println(gDisplayValues.production);
             Serial.print("gDisplayValues.watt / function measure: ");
             Serial.println(gDisplayValues.watt);
+            Serial.print("gDisplayValues.grid / function measure: ");
+            Serial.println(gDisplayValues.grid);
             Serial.print("gDisplayValues.surplus / function measure: ");
             Serial.println(gDisplayValues.surplus);
             Serial.print("gDisplayValues.froniusup / function measure: ");
@@ -100,6 +104,7 @@ void measureElectricityf(void * parameter)
             if (Pow_mqtt_send > 10) {
                 Mqtt_send(String(config.IDX), String(int(gDisplayValues.watt)));
                 Mqtt_send("pvrouter-surplus", String(int(gDisplayValues.surplus)));
+                Mqtt_send("pvrouter-grid", String(int(gDisplayValues.grid)));
                 Pow_mqtt_send = 0;
             }
         #endif
