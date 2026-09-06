@@ -26,6 +26,10 @@ extern DisplayValues gDisplayValues;
 volatile uint8_t gDisplayPage = 0;
 volatile bool gDisplayForceRefresh = true;
 
+// Display-only startup window: distinguish a dimmer that has just been
+// commanded ON from a persistent command/actual mismatch.
+static unsigned long gDimmerStartSinceMs = 0;
+
 static String formatPowerTTGO(int watts)
 {
   if (watts < 0) watts = -watts;
@@ -272,6 +276,21 @@ static void drawTTGOZeroGridDashboard()
       dimmerFresh &&
       (abs(commandedDimmer - reportedDimmer) <= 2);
 
+  // A fresh positive command with an almost-zero actual output is a normal
+  // startup for a short time. Do not keep resetting this timer when the Zero
+  // Grid command changes while the dimmer is still starting.
+  if (dimmerFresh && commandedDimmer > 0 && reportedDimmer < 5) {
+    if (gDimmerStartSinceMs == 0)
+      gDimmerStartSinceMs = now;
+  }
+  else {
+    gDimmerStartSinceMs = 0;
+  }
+
+  const bool dimmerStarting =
+      gDimmerStartSinceMs > 0 &&
+      ((unsigned long)(now - gDimmerStartSinceMs) <= 15000UL);
+
   // Display-only neutral zone. It does not change the Zero Grid regulation.
   const int gridDisplayNeutralW = 20;
   const bool importing =
@@ -313,8 +332,8 @@ static void drawTTGOZeroGridDashboard()
     display.print("--.- C");
   }
 
-  const int ceIconX = 164;
-  const int ceTextX = 180;
+  const int ceIconX = 158;
+  const int ceTextX = 174;
 
   if (!dimmerFresh) {
     drawErrorIcon(ceIconX, 2, TFT_RED);
@@ -322,7 +341,19 @@ static void drawTTGOZeroGridDashboard()
     display.setCursor(ceTextX, 2, 2);
     display.print("CE ERR");
   }
-  else if (!dimmerSynced && !heaterAtTempLimit) {
+  else if (heaterAtTempLimit) {
+    drawCheckIcon(ceIconX, 2, TFT_ORANGE);
+    display.setTextColor(TFT_ORANGE, TFT_BLACK);
+    display.setCursor(ceTextX, 2, 2);
+    display.print("TEMP MAX");
+  }
+  else if (dimmerStarting) {
+    drawClockIcon(ceIconX, 2, TFT_YELLOW);
+    display.setTextColor(TFT_YELLOW, TFT_BLACK);
+    display.setCursor(ceTextX, 2, 2);
+    display.print("CE START");
+  }
+  else if (!dimmerSynced) {
     drawClockIcon(ceIconX, 2, TFT_YELLOW);
     display.setTextColor(TFT_YELLOW, TFT_BLACK);
     display.setCursor(ceTextX, 2, 2);
@@ -399,6 +430,11 @@ static void drawTTGOZeroGridDashboard()
     display.setCursor(133, 91, 2);
     display.setTextColor(TFT_ORANGE, TFT_BLACK);
     display.print("TEMP MAX");
+  }
+  else if (dimmerStarting) {
+    display.setCursor(145, 91, 2);
+    display.setTextColor(TFT_YELLOW, TFT_BLACK);
+    display.print("START");
   }
   else if (dimmerFresh && !dimmerSynced) {
     display.setCursor(145, 91, 2);
