@@ -118,12 +118,18 @@ void froniusZeroGridSimulation()
     Serial.printf("Correction    : %+d %% (%+d W requested)\n",
                   correction, powerCorrection);
 
-    if (grid < gridLow)
-        Serial.println("Status        : SURPLUS PV -> LOAD UP");
-    else if (grid > gridHigh)
-        Serial.println("Status        : IMPORT RESEAU -> LOAD DOWN");
-    else
-        Serial.println("Status        : ZERO GRID OK -> HOLD");
+    if (grid < gridLow) {
+        if (dimmer >= FRONIUS_MAX_DIMMER && targetDimmer >= FRONIUS_MAX_DIMMER)
+            Serial.println("Status        : LOAD LIMITED -> DIMMER MAX");
+        else
+            Serial.println("Status        : SURPLUS PV -> LOAD UP");
+    }
+    else if (grid > gridHigh) {
+       Serial.println("Status        : IMPORT RESEAU -> LOAD DOWN");
+    }
+else {
+    Serial.println("Status        : ZERO GRID OK -> HOLD");
+}
 
     if (commandSent) {
         if (commandOk)
