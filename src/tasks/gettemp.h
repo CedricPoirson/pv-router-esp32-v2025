@@ -50,8 +50,10 @@ void GetDImmerTemp(void * parameter){
           const char *temperature = doc["temperature"] | nullptr;
           if (dallas0 && dallas0[0] != '\0')
             gDisplayValues.temperature = dallas0;
-          else if (temperature)
+          else if (temperature && temperature[0] != '\0')
             gDisplayValues.temperature = temperature;
+          else
+            gDisplayValues.temperature = "";
 
           gDisplayValues.dimmerPower = doc["power"] | 0.0f;
           gDisplayValues.dimmerPtotal = doc["Ptotal"] | 0.0f;
@@ -78,7 +80,9 @@ void GetDImmerTemp(void * parameter){
             Serial.printf("[DIMMER] LINK OK ACTUAL=%d%% CMD=%d%% TEMP=%s C RSSI=%d\n",
                           gDisplayValues.dimmerReported,
                           gDisplayValues.dimmerCommandReported,
-                          gDisplayValues.temperature.c_str(),
+                          gDisplayValues.temperature.length() > 0
+                              ? gDisplayValues.temperature.c_str()
+                              : "--.-",
                           gDisplayValues.dimmerRssi);
           }
 
@@ -102,6 +106,12 @@ void GetDImmerTemp(void * parameter){
     else {
       gDisplayValues.dimmerCommOk = false;
       errorReason = "HTTP begin failed";
+    }
+
+    if (!currentLinkOk) {
+      // Never display a stale ECS temperature as if it were current.
+      // The TTGO dashboard converts an empty value to "--.- C".
+      gDisplayValues.temperature = "";
     }
 
     if (!currentLinkOk && (!linkStateKnown || previousLinkOk)) {
