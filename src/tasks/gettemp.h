@@ -39,6 +39,7 @@ void GetDImmerTemp(void * parameter){
 
       if (httpResponseCode == HTTP_CODE_OK) {
         const String payload = httpdimmer.getString();
+        Serial.printf("[DIMMER JSON] %s\n", payload.c_str());
         StaticJsonDocument<1024> doc;
         const DeserializationError error = deserializeJson(doc, payload);
 
@@ -109,8 +110,6 @@ void GetDImmerTemp(void * parameter){
     }
 
     if (!currentLinkOk) {
-      // Never display a stale ECS temperature as if it were current.
-      // The TTGO dashboard converts an empty value to "--.- C".
       gDisplayValues.temperature = "";
     }
 
