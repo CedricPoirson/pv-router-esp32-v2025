@@ -47,7 +47,6 @@ void measureElectricityf(void * parameter)
                     JsonObject site = doc["Body"]["Data"]["Site"];
 
                     long generatedPower = lastProduction;
-
                     if (!site["P_PV"].isNull()) {
                         generatedPower = site["P_PV"];
                     }
@@ -65,6 +64,12 @@ void measureElectricityf(void * parameter)
 
                     lastLoadPower = loadPower;
                     gDisplayValues.watt = loadPower;
+
+                    gDisplayValues.surplus = gDisplayValues.production - gDisplayValues.watt;
+                    if (gDisplayValues.surplus < 0) {
+                        gDisplayValues.surplus = 0;
+                    }
+
                     gDisplayValues.froniusup = true;
 
                 } else {
@@ -84,6 +89,8 @@ void measureElectricityf(void * parameter)
             Serial.println(gDisplayValues.production);
             Serial.print("gDisplayValues.watt / function measure: ");
             Serial.println(gDisplayValues.watt);
+            Serial.print("gDisplayValues.surplus / function measure: ");
+            Serial.println(gDisplayValues.surplus);
             Serial.print("gDisplayValues.froniusup / function measure: ");
             Serial.println(gDisplayValues.froniusup);
         #endif
@@ -92,6 +99,7 @@ void measureElectricityf(void * parameter)
             Pow_mqtt_send++;
             if (Pow_mqtt_send > 10) {
                 Mqtt_send(String(config.IDX), String(int(gDisplayValues.watt)));
+                Mqtt_send("pvrouter-surplus", String(int(gDisplayValues.surplus)));
                 Pow_mqtt_send = 0;
             }
         #endif
