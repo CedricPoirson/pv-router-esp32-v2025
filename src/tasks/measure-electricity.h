@@ -11,6 +11,10 @@
 
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <math.h>
+
+#define FRONIUS_HTTP_TIMEOUT_MS 700UL
+#define FRONIUS_POLL_INTERVAL_MS 1500UL
 
 extern DisplayValues gDisplayValues;
 extern Config config;
@@ -21,66 +25,90 @@ volatile uint32_t gFroniusSampleCounter = 0;
 
 void measureElectricityf(void * parameter)
 {
+    (void)parameter;
+
     bool froniusStateKnown = false;
     bool previousFroniusOk = false;
 
     for (;;) {
+        const unsigned long cycleStartMs = millis();
+
 #if WIFI_ACTIVE == true
         HTTPClient http;
         String url = "http://" + String(IP_FRONIUS) +
                      "/solar_api/v1/GetPowerFlowRealtimeData.fcgi";
 
-        http.setTimeout(3000);
-        http.begin(url);
-        int httpCode = http.GET();
+        http.setConnectTimeout(FRONIUS_HTTP_TIMEOUT_MS);
+        http.setTimeout(FRONIUS_HTTP_TIMEOUT_MS);
 
         bool validFroniusSample = false;
         String errorReason = "unknown";
 
-        if (httpCode == HTTP_CODE_OK) {
-            String payload = http.getString();
-            DynamicJsonDocument doc(2048);
-            DeserializationError error = deserializeJson(doc, payload);
+        if (http.begin(url)) {
+            const int httpCode = http.GET();
 
-            if (!error) {
-                int apiStatus = doc["Head"]["Status"]["Code"] | -1;
-                JsonVariant gridValue = doc["Body"]["Data"]["Site"]["P_Grid"];
+            if (httpCode == HTTP_CODE_OK) {
+                const String payload = http.getString();
+                StaticJsonDocument<2048> doc;
+                const DeserializationError error = deserializeJson(doc, payload);
 
-                if (apiStatus == 0 && !gridValue.isNull()) {
-                    gDisplayValues.grid = gridValue.as<double>();
+                if (!error) {
+                    const int apiStatus = doc["Head"]["Status"]["Code"] | -1;
+                    JsonVariant gridValue = doc["Body"]["Data"]["Site"]["P_Grid"];
 
-                    JsonVariant pvValue = doc["Body"]["Data"]["Site"]["P_PV"];
-                    if (!pvValue.isNull()) {
-                        gDisplayValues.production = pvValue.as<double>();
+                    if (apiStatus == 0 && !gridValue.isNull()) {
+                        const double grid = gridValue.as<double>();
+
+                        if (isfinite(grid) && fabs(grid) < 50000.0) {
+                            gDisplayValues.grid = grid;
+
+                            JsonVariant pvValue = doc["Body"]["Data"]["Site"]["P_PV"];
+                            if (!pvValue.isNull()) {
+                                const double pv = pvValue.as<double>();
+                                if (isfinite(pv))
+                                    gDisplayValues.production = pv;
+                            }
+                            else {
+                                JsonVariant inverterPower =
+                                    doc["Body"]["Data"]["Inverters"]["1"]["P"];
+                                if (!inverterPower.isNull()) {
+                                    const double pv = inverterPower.as<double>();
+                                    if (isfinite(pv))
+                                        gDisplayValues.production = pv;
+                                }
+                            }
+
+                            validFroniusSample = true;
+                        }
+                        else {
+                            errorReason = "invalid P_Grid";
+                        }
                     }
                     else {
-                        JsonVariant inverterPower = doc["Body"]["Data"]["Inverters"]["1"]["P"];
-                        if (!inverterPower.isNull())
-                            gDisplayValues.production = inverterPower.as<double>();
+                        errorReason = "API Status.Code=" + String(apiStatus);
+                        if (gridValue.isNull())
+                            errorReason += " P_Grid=null";
                     }
-
-                    validFroniusSample = true;
                 }
                 else {
-                    errorReason = "API Status.Code=" + String(apiStatus);
-                    if (gridValue.isNull())
-                        errorReason += " P_Grid=null";
+                    errorReason = "JSON ";
+                    errorReason += error.c_str();
                 }
             }
             else {
-                errorReason = "JSON ";
-                errorReason += error.c_str();
+                errorReason = "HTTP " + String(httpCode);
             }
+
+            http.end();
         }
         else {
-            errorReason = "HTTP " + String(httpCode);
+            errorReason = "HTTP begin failed";
         }
-
-        http.end();
 
         gDisplayValues.froniusup = validFroniusSample;
 
         if (validFroniusSample) {
+            gDisplayValues.froniusLastOkMs = millis();
             gFroniusSampleCounter++;
 
             if (!froniusStateKnown || !previousFroniusOk) {
@@ -97,16 +125,18 @@ void measureElectricityf(void * parameter)
         previousFroniusOk = validFroniusSample;
 
 #if MQTT_CLIENT == true
-        // Publish one coherent retained JSON state after every Fronius poll.
-        // This also exposes Fronius OFFLINE transitions without extra HTTP
-        // requests or an independent MQTT timer.
+        // Telemetry only. MQTT is not part of the regulation loop.
         Mqtt_publishState();
 #endif
 #endif
 
-        // Fronius Solar API realtime calls: one PowerFlow request every ~4 s.
-        // P_Grid and P_PV are read from the same response.
-        vTaskDelay(4000 / portTICK_PERIOD_MS);
+        const unsigned long elapsedMs = millis() - cycleStartMs;
+        const unsigned long waitMs =
+            (elapsedMs < FRONIUS_POLL_INTERVAL_MS)
+                ? (FRONIUS_POLL_INTERVAL_MS - elapsedMs)
+                : 1UL;
+
+        vTaskDelay(waitMs / portTICK_PERIOD_MS);
     }
 }
 
