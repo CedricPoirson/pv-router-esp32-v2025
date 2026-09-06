@@ -42,6 +42,98 @@ static void drawCenteredTTGO(const String &text, int y, int font, int color)
   display.print(text);
 }
 
+// Small vector icons: no special font or bitmap required.
+static void drawThermometerIcon(int x, int y, int color)
+{
+  display.drawRect(x + 2, y, 3, 9, color);
+  display.drawLine(x + 3, y + 3, x + 3, y + 10, color);
+  display.drawCircle(x + 3, y + 11, 3, color);
+  display.fillCircle(x + 3, y + 11, 2, color);
+}
+
+static void drawCheckIcon(int x, int y, int color)
+{
+  display.drawCircle(x + 5, y + 5, 5, color);
+  display.drawLine(x + 2, y + 5, x + 4, y + 7, color);
+  display.drawLine(x + 4, y + 7, x + 8, y + 2, color);
+}
+
+static void drawSunIcon(int x, int y, int color)
+{
+  display.drawCircle(x + 6, y + 6, 3, color);
+  display.drawLine(x + 6, y, x + 6, y + 2, color);
+  display.drawLine(x + 6, y + 10, x + 6, y + 12, color);
+  display.drawLine(x, y + 6, x + 2, y + 6, color);
+  display.drawLine(x + 10, y + 6, x + 12, y + 6, color);
+  display.drawLine(x + 2, y + 2, x + 3, y + 3, color);
+  display.drawLine(x + 9, y + 9, x + 10, y + 10, color);
+  display.drawLine(x + 9, y + 3, x + 10, y + 2, color);
+  display.drawLine(x + 2, y + 10, x + 3, y + 9, color);
+}
+
+static void drawGridArrowIcon(int x, int y, bool exportPower, int color)
+{
+  const int cy = y + 5;
+  if (exportPower) {
+    display.drawLine(x, cy, x + 10, cy, color);
+    display.drawLine(x + 10, cy, x + 7, cy - 3, color);
+    display.drawLine(x + 10, cy, x + 7, cy + 3, color);
+  }
+  else {
+    display.drawLine(x, cy, x + 10, cy, color);
+    display.drawLine(x, cy, x + 3, cy - 3, color);
+    display.drawLine(x, cy, x + 3, cy + 3, color);
+  }
+}
+
+static void drawHeaterIcon(int x, int y, int color)
+{
+  display.drawRect(x, y, 12, 11, color);
+  display.drawLine(x + 2, y + 8, x + 4, y + 3, color);
+  display.drawLine(x + 4, y + 3, x + 6, y + 8, color);
+  display.drawLine(x + 6, y + 8, x + 8, y + 3, color);
+  display.drawLine(x + 8, y + 3, x + 10, y + 8, color);
+}
+
+static void drawClockIcon(int x, int y, int color)
+{
+  display.drawCircle(x + 5, y + 5, 5, color);
+  display.drawLine(x + 5, y + 5, x + 5, y + 2, color);
+  display.drawLine(x + 5, y + 5, x + 8, y + 6, color);
+}
+
+static void drawWasherIcon(int x, int y, int color)
+{
+  display.drawRect(x, y, 11, 11, color);
+  display.drawLine(x + 2, y + 2, x + 8, y + 2, color);
+  display.drawCircle(x + 5, y + 7, 3, color);
+}
+
+static void drawErrorIcon(int x, int y, int color)
+{
+  display.drawCircle(x + 5, y + 5, 5, color);
+  display.drawLine(x + 2, y + 2, x + 8, y + 8, color);
+  display.drawLine(x + 8, y + 2, x + 2, y + 8, color);
+}
+
+static void drawAdviceTTGO(const String &text, int color, int iconType)
+{
+  display.setTextFont(2);
+  display.setTextSize(1);
+  const int iconWidth = 15;
+  const int textWidth = display.textWidth(text, 2);
+  int x = (240 - (iconWidth + textWidth)) / 2;
+  if (x < 0) x = 0;
+
+  if (iconType == 2) drawWasherIcon(x, 119, color);
+  else if (iconType == 1) drawClockIcon(x, 119, color);
+  else drawErrorIcon(x, 119, color);
+
+  display.setTextColor(color, TFT_BLACK);
+  display.setCursor(x + iconWidth, 117, 2);
+  display.print(text);
+}
+
 static void drawTTGOZeroGridDashboard()
 {
   display.fillScreen(TFT_BLACK);
@@ -82,22 +174,27 @@ static void drawTTGOZeroGridDashboard()
   if (clockText.length() >= 5) clockText = clockText.substring(0, 5);
   display.print(clockText);
 
-  display.setCursor(62, 2, 2);
   float waterTemp = gDisplayValues.temperature.toFloat();
+  drawThermometerIcon(61, 2, TFT_CYAN);
+  display.setCursor(72, 2, 2);
+  display.setTextColor(TFT_WHITE, TFT_BLACK);
   if (waterTemp > 0.0f) {
-    display.printf("EAU %.1fC", waterTemp);
+    display.printf("%.1fC", waterTemp);
   }
   else {
-    display.print("EAU --.-C");
+    display.print("--.-C");
   }
 
-  display.setCursor(178, 2, 2);
   if (dimmerFresh) {
+    drawCheckIcon(176, 3, TFT_GREEN);
     display.setTextColor(TFT_GREEN, TFT_BLACK);
+    display.setCursor(189, 2, 2);
     display.print("CE OK");
   }
   else {
+    drawErrorIcon(176, 3, TFT_RED);
     display.setTextColor(TFT_RED, TFT_BLACK);
+    display.setCursor(189, 2, 2);
     display.print("CE ERR");
   }
 
@@ -115,33 +212,38 @@ static void drawTTGOZeroGridDashboard()
 
   // -------- Secondary information --------
   display.setTextFont(2);
-  display.setTextColor(TFT_WHITE, TFT_BLACK);
-  display.setCursor(3, 77, 2);
-  display.print("PV ");
+  drawSunIcon(3, 77, TFT_YELLOW);
   display.setTextColor(TFT_GREEN, TFT_BLACK);
+  display.setCursor(18, 77, 2);
+  display.print("PV ");
   display.print(formatPowerTTGO((int)gDisplayValues.production));
 
-  display.setCursor(121, 77, 2);
   if (grid < 0) {
+    drawGridArrowIcon(121, 80, true, TFT_CYAN);
     display.setTextColor(TFT_CYAN, TFT_BLACK);
+    display.setCursor(135, 77, 2);
     display.print("EXP ");
     display.print(formatPowerTTGO(-grid));
   }
   else {
+    drawGridArrowIcon(121, 80, false, TFT_RED);
     display.setTextColor(TFT_RED, TFT_BLACK);
+    display.setCursor(135, 77, 2);
     display.print("IMP ");
     display.print(formatPowerTTGO(grid));
   }
 
-  display.setCursor(3, 99, 2);
+  drawHeaterIcon(3, 100, TFT_ORANGE);
+  display.setCursor(19, 99, 2);
   display.setTextColor(TFT_WHITE, TFT_BLACK);
   display.printf("CE %d%%", reportedDimmer);
-  display.setCursor(73, 99, 2);
+  display.setCursor(86, 99, 2);
   display.printf("%dW", heaterPower);
 
-  // -------- Simple family-facing recommendation --------
+  // -------- Family-facing recommendation --------
   String advice;
   int adviceColor;
+  int adviceIcon = 0;
 
   if (!gDisplayValues.froniusup) {
     advice = "FRONIUS ERR";
@@ -154,17 +256,20 @@ static void drawTTGOZeroGridDashboard()
   else if (availablePower >= 2200) {
     advice = "MACHINE OK";
     adviceColor = TFT_GREEN;
+    adviceIcon = 2;
   }
   else if (availablePower >= 500) {
-    advice = "PETITE CHARGE";
+    advice = "ATTENDRE MACHINE";
     adviceColor = TFT_YELLOW;
+    adviceIcon = 1;
   }
   else {
     advice = "ATTENDRE";
     adviceColor = TFT_RED;
+    adviceIcon = 1;
   }
 
-  drawCenteredTTGO(advice, 117, 2, adviceColor);
+  drawAdviceTTGO(advice, adviceColor, adviceIcon);
 }
 
 #endif
