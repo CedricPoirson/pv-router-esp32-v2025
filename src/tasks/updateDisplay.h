@@ -194,17 +194,14 @@ static void drawPowerGaugeTTGO(int watts, bool valid)
   if (valid) {
     const int markerX = gaugeXForPowerTTGO(watts);
 
-    display.drawFastVLine(markerX - 2, y - 2, height + 3, TFT_WHITE);
-    display.drawFastVLine(markerX + 2, y - 2, height + 3, TFT_WHITE);
-    display.fillRect(markerX - 1, y - 2, 3, height + 3, TFT_BLACK);
-    display.fillTriangle(markerX - 4, y - 4,
-                         markerX + 4, y - 4,
+    // Large solid cursor: a wide white arrow on black plus a 3 px line
+    // through the coloured gauge. Deliberately no dark centre so it remains
+    // obvious from a distance on every colour zone.
+    display.fillTriangle(markerX - 7, y - 10,
+                         markerX + 7, y - 10,
                          markerX, y - 1,
                          TFT_WHITE);
-    display.fillTriangle(markerX - 2, y - 3,
-                         markerX + 2, y - 3,
-                         markerX, y - 1,
-                         TFT_BLACK);
+    display.fillRect(markerX - 1, y - 1, 3, height + 2, TFT_WHITE);
   }
 
   display.setTextFont(1);
