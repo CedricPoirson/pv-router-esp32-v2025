@@ -43,20 +43,23 @@ void publishHADiscovery() {
     }
 
     payload += "}";
-
-    Serial.println("Discovery topic:");
-    Serial.println(config);
-    Serial.println("Payload:");
-    Serial.println(payload);
-    Serial.print("Payload size: ");
-    Serial.println(payload.length());
-
-    bool ok = client.publish(config.c_str(), payload.c_str(), true);
-    client.loop();
-
-    Serial.print("MQTT Discovery result: ");
-    Serial.println(ok ? "OK" : "FAILED");
+    client.publish(config.c_str(), payload.c_str(), true);
   }
+
+  // Fronius availability binary sensor
+  String config = "homeassistant/binary_sensor/pvrouter-fronius/config";
+  String payload = "{";
+  payload += "\"name\":\"PVRouter Fronius\",";
+  payload += "\"unique_id\":\"pvrouter_fronius_esp32\",";
+  payload += "\"state_topic\":\"homeassistant/binary_sensor/pvrouter-fronius/state\",";
+  payload += "\"payload_on\":\"ON\",";
+  payload += "\"payload_off\":\"OFF\",";
+  payload += "\"device_class\":\"connectivity\",";
+  payload += "\"device\":{";
+  payload += "\"identifiers\":[\"pvrouter_esp32\"],";
+  payload += "\"name\":\"PVRouter ESP32\"}";
+  payload += "}";
+  client.publish(config.c_str(), payload.c_str(), true);
 
   Serial.println("=== MQTT HA DISCOVERY END ===");
 }
@@ -75,6 +78,7 @@ void reconnect() {
       Mqtt_send("pvrouter-status", String(int(gDisplayValues.froniusup)));
       Mqtt_send("pvrouter-production", String(int(gDisplayValues.production)));
       Mqtt_send("pvrouter-consumption", String(int(gDisplayValues.watt)));
+      client.publish("homeassistant/binary_sensor/pvrouter-fronius/state", gDisplayValues.froniusup ? "ON" : "OFF", true);
     }
   }
 }
