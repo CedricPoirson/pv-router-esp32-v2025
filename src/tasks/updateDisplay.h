@@ -192,11 +192,19 @@ static void drawPowerGaugeTTGO(int watts, bool valid)
 
   if (valid) {
     const int markerX = gaugeXForPowerTTGO(watts);
-    display.drawFastVLine(markerX, y - 3, height + 6, TFT_WHITE);
-    display.fillTriangle(markerX - 3, y - 3,
-                         markerX + 3, y - 3,
+
+    // High-contrast cursor: white outline + black core, visible on every zone.
+    display.drawFastVLine(markerX - 2, y - 2, height + 3, TFT_WHITE);
+    display.drawFastVLine(markerX + 2, y - 2, height + 3, TFT_WHITE);
+    display.fillRect(markerX - 1, y - 2, 3, height + 3, TFT_BLACK);
+    display.fillTriangle(markerX - 4, y - 4,
+                         markerX + 4, y - 4,
                          markerX, y - 1,
                          TFT_WHITE);
+    display.fillTriangle(markerX - 2, y - 3,
+                         markerX + 2, y - 3,
+                         markerX, y - 1,
+                         TFT_BLACK);
   }
 
   display.setTextFont(1);
@@ -304,22 +312,26 @@ static void drawTTGOZeroGridDashboard()
     display.print("--.- C");
   }
 
+  // Keep status far enough from the right edge to avoid TFT text wrapping.
+  const int ceIconX = 164;
+  const int ceTextX = 180;
+
   if (!dimmerFresh) {
-    drawErrorIcon(174, 2, TFT_RED);
+    drawErrorIcon(ceIconX, 2, TFT_RED);
     display.setTextColor(TFT_RED, TFT_BLACK);
-    display.setCursor(190, 2, 2);
+    display.setCursor(ceTextX, 2, 2);
     display.print("CE ERR");
   }
   else if (!dimmerSynced && !heaterAtTempLimit) {
-    drawClockIcon(174, 2, TFT_YELLOW);
+    drawClockIcon(ceIconX, 2, TFT_YELLOW);
     display.setTextColor(TFT_YELLOW, TFT_BLACK);
-    display.setCursor(190, 2, 2);
+    display.setCursor(ceTextX, 2, 2);
     display.print("CE SYNC");
   }
   else {
-    drawCheckIcon(174, 2, TFT_GREEN);
+    drawCheckIcon(ceIconX, 2, TFT_GREEN);
     display.setTextColor(TFT_GREEN, TFT_BLACK);
-    display.setCursor(190, 2, 2);
+    display.setCursor(ceTextX, 2, 2);
     display.print("CE OK");
   }
 
