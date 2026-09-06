@@ -8,32 +8,39 @@
 #include "../functions/froniusZeroGrid.h"
 
 extern DisplayValues gDisplayValues;
+extern volatile uint32_t gFroniusSampleCounter;
 
 /**
- * Task: regulate the dimmer from the active electricity measurement source.
+ * Task: regulate the dimmer from fresh Fronius PowerFlow samples.
  *
- * When Fronius is available, V12 is the only controller allowed to change
- * the dimmer command. The legacy watt-based controller is used only when
- * Fronius is unavailable, avoiding two regulators fighting each other.
+ * V12.1 no longer waits for an independent 5 s control timer. The task wakes
+ * frequently but executes the Zero Grid controller exactly once for each new
+ * validated Fronius sample. This keeps the official ~4 s Fronius polling
+ * cadence while removing up to ~5 s of extra control latency.
  */
 void updateDimmer(void * parameter){
+  uint32_t lastProcessedFroniusSample = 0;
+
   for (;;){
     gDisplayValues.task = true;
 
 #if WIFI_ACTIVE == true
     if (gDisplayValues.froniusup == true) {
-      froniusZeroGridSimulation();
+      const uint32_t sample = gFroniusSampleCounter;
+
+      if (sample != 0 && sample != lastProcessedFroniusSample) {
+        froniusZeroGridSimulation();
+        lastProcessedFroniusSample = sample;
+      }
     }
-    else {
-      dimmer();
-    }
+    // When the Fronius sample is invalid we simply hold the last command for
+    // now. Communication watchdog / fail-safe shutdown will be added later.
 #endif
 
     gDisplayValues.task = false;
 
-    // Keep the control loop slower than the Fronius acquisition loop so each
-    // decision normally uses a fresh grid measurement.
-    vTaskDelay(5000 / portTICK_PERIOD_MS);
+    // Fast local wake-up; no additional Fronius HTTP call is made here.
+    vTaskDelay(100 / portTICK_PERIOD_MS);
   }
 }
 
