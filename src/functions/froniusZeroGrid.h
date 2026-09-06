@@ -2,7 +2,7 @@
 #define FRONIUS_ZERO_GRID_H
 
 // Fronius Zero Grid controller
-// V12.2 - direct closed-loop control from P_Grid + periodic dimmer refresh
+// V13.1 - V12.2 regulation with concise event-based serial logging
 // Positive P_Grid = import from grid
 // Negative P_Grid = export to grid
 
@@ -20,16 +20,20 @@
 #define DIMMER_IP "192.168.100.29"
 #define DIMMER_MIN_CHANGE 1
 #define DIMMER_HTTP_TIMEOUT_MS 1500
-
-// Even when the requested power does not change, resend it periodically.
-// This keeps the remote ESP8266 synchronized if it restarts or if it has a
-// communication watchdog, without spamming it on every Fronius sample.
 #define DIMMER_REFRESH_MS 20000UL
 
 extern DisplayValues gDisplayValues;
 
 static int lastSentDimmer = -1;
 static unsigned long lastDimmerSendMs = 0;
+static int lastZeroGridState = -1;
+
+enum ZeroGridState {
+    ZERO_GRID_HOLD = 0,
+    ZERO_GRID_SURPLUS,
+    ZERO_GRID_IMPORT,
+    ZERO_GRID_LOAD_LIMITED
+};
 
 bool sendDimmerPower(int power)
 {
@@ -41,7 +45,10 @@ bool sendDimmerPower(int power)
     int httpCode = http.GET();
     http.end();
 
-    Serial.printf("Dimmer HTTP : %d POWER=%d\n", httpCode, power);
+    if (httpCode != HTTP_CODE_OK) {
+        Serial.printf("[DIMMER] HTTP ERROR=%d POWER=%d\n", httpCode, power);
+    }
+
     return httpCode == HTTP_CODE_OK;
 }
 
@@ -49,22 +56,18 @@ bool sendDimmerPower(int power)
 void froniusZeroGridSimulation()
 {
     const int grid = (int)gDisplayValues.grid;
-    const int production = (int)gDisplayValues.production;
     const int dimmer = gDisplayValues.dimmer;
 
     int targetDimmer = dimmer;
     int targetHeaterPower = (FRONIUS_HEATER_POWER_W * dimmer) / 100;
     int powerCorrection = 0;
 
-    const int gridLow = FRONIUS_GRID_TARGET_W - FRONIUS_GRID_DEADBAND_W;    // -20 W
-    const int gridHigh = FRONIUS_GRID_TARGET_W + FRONIUS_GRID_DEADBAND_W;  //   0 W
+    const int gridLow = FRONIUS_GRID_TARGET_W - FRONIUS_GRID_DEADBAND_W;
+    const int gridHigh = FRONIUS_GRID_TARGET_W + FRONIUS_GRID_DEADBAND_W;
 
-    // Only correct outside the desired -20..0 W band.
     if (grid < gridLow || grid > gridHigh) {
         const int currentHeaterPower = (FRONIUS_HEATER_POWER_W * dimmer) / 100;
 
-        // Increasing heater power moves P_Grid in the positive direction.
-        // Example: grid=-600 W, target=-10 W => add about 590 W of load.
         powerCorrection = FRONIUS_GRID_TARGET_W - grid;
         targetHeaterPower = currentHeaterPower + powerCorrection;
 
@@ -80,7 +83,6 @@ void froniusZeroGridSimulation()
     if (targetDimmer < 0) targetDimmer = 0;
     if (targetDimmer > FRONIUS_MAX_DIMMER) targetDimmer = FRONIUS_MAX_DIMMER;
 
-    const int correction = targetDimmer - dimmer;
     gDisplayValues.dimmer = targetDimmer;
 
     const unsigned long now = millis();
@@ -91,61 +93,54 @@ void froniusZeroGridSimulation()
         (lastSentDimmer >= 0) &&
         ((unsigned long)(now - lastDimmerSendMs) >= DIMMER_REFRESH_MS);
 
-    bool commandSent = false;
-    bool commandOk = true;
-
     if (valueChanged || refreshDue) {
-        commandSent = true;
-        commandOk = sendDimmerPower(gDisplayValues.dimmer);
+        const int previousSentDimmer = lastSentDimmer;
+        const bool commandOk = sendDimmerPower(gDisplayValues.dimmer);
 
-        // Retry on the next control cycle if the ESP8266 did not answer.
         if (commandOk) {
             lastSentDimmer = gDisplayValues.dimmer;
             lastDimmerSendMs = now;
+
+            if (valueChanged) {
+                Serial.printf("[DIMMER] %d%% -> %d%% (GRID=%d W)\n",
+                              previousSentDimmer < 0 ? dimmer : previousSentDimmer,
+                              gDisplayValues.dimmer,
+                              grid);
+            }
         }
     }
 
-    Serial.println();
-    Serial.println("========== FRONIUS ZERO GRID V12.2 ==========");
-    Serial.printf("PV production : %d W\n", production);
-    Serial.printf("Grid exchange : %d W\n", grid);
-    Serial.printf("Grid target   : %d W (band %d..%d W)\n",
-                  FRONIUS_GRID_TARGET_W, gridLow, gridHigh);
-    Serial.printf("Heater max    : %d W\n", FRONIUS_HEATER_POWER_W);
-    Serial.printf("Dimmer current: %d %%\n", dimmer);
-    Serial.printf("Dimmer target : %d %%\n", targetDimmer);
-    Serial.printf("Power target  : %d W\n", targetHeaterPower);
-    Serial.printf("Correction    : %+d %% (%+d W requested)\n",
-                  correction, powerCorrection);
+    int zeroGridState = ZERO_GRID_HOLD;
 
     if (grid < gridLow) {
         if (dimmer >= FRONIUS_MAX_DIMMER && targetDimmer >= FRONIUS_MAX_DIMMER)
-            Serial.println("Status        : LOAD LIMITED -> DIMMER MAX");
+            zeroGridState = ZERO_GRID_LOAD_LIMITED;
         else
-            Serial.println("Status        : SURPLUS PV -> LOAD UP");
+            zeroGridState = ZERO_GRID_SURPLUS;
     }
     else if (grid > gridHigh) {
-       Serial.println("Status        : IMPORT RESEAU -> LOAD DOWN");
-    }
-else {
-    Serial.println("Status        : ZERO GRID OK -> HOLD");
-}
-
-    if (commandSent) {
-        if (commandOk)
-            Serial.printf("Dimmer output : HTTP OK (%s)\n",
-                          valueChanged ? "new target" : "periodic refresh");
-        else
-            Serial.println("Dimmer output : HTTP ERROR - RETRY NEXT SAMPLE");
-    }
-    else {
-        unsigned long ageMs = (lastSentDimmer >= 0) ? (now - lastDimmerSendMs) : 0;
-        Serial.printf("Dimmer output : ACTIVE %d %% - no resend needed (age %lu s)\n",
-                      lastSentDimmer,
-                      ageMs / 1000UL);
+        zeroGridState = ZERO_GRID_IMPORT;
     }
 
-    Serial.println("=============================================");
+    if (zeroGridState != lastZeroGridState) {
+        switch (zeroGridState) {
+            case ZERO_GRID_LOAD_LIMITED:
+                Serial.printf("[ZERO] LOAD LIMITED - DIMMER MAX, export=%d W\n",
+                              grid < 0 ? -grid : 0);
+                break;
+            case ZERO_GRID_SURPLUS:
+                Serial.println("[ZERO] SURPLUS PV -> LOAD UP");
+                break;
+            case ZERO_GRID_IMPORT:
+                Serial.println("[ZERO] IMPORT RESEAU -> LOAD DOWN");
+                break;
+            default:
+                Serial.println("[ZERO] TARGET OK (-20..0 W)");
+                break;
+        }
+
+        lastZeroGridState = zeroGridState;
+    }
 }
 
 #endif
