@@ -22,14 +22,27 @@
  * Switch Screnn button and time on
  */
 #define SWITCH 35
-//#define SWITCHTIMER 0   // 0 : always ON  / other : time in sec 
+//#define SWITCHTIMER 0   // 0 : always ON  / other : time in sec
 
 
 #define IP_FRONIUS "192.168.100.245"
 
+/**
+ * Fronius / remote dimmer timings.
+ * The router remains autonomous: Home Assistant and MQTT are telemetry only.
+ */
+#define FRONIUS_HTTP_TIMEOUT_MS 700
+#define FRONIUS_REFRESH_MS 1500
+#define FRONIUS_STALE_MS 5000
+
+#define DIMMER_RATED_POWER_W 800.0f
+#define DIMMER_HTTP_TIMEOUT_MS 500
+#define DIMMER_KEEPALIVE_MS 60000UL
+#define DIMMER_STATE_REFRESH_MS 3000UL
 
 /**
- * Time between 2 mesure of dimmer temp
+ * Legacy option kept for compatibility. /state polling now uses
+ * DIMMER_STATE_REFRESH_MS.
  */
 #define GETTEMPREFRESH 30
 
@@ -71,15 +84,15 @@
 #define HOME_VOLTAGE 225.0
 
 /**
- *  Dimmer 
+ *  Dimmer
  */
 
 #define DIMMER true
 #define DIMMERLOCAL false
 #define DALLAS false
 
-#if DIMMERLOCAL 
-#define outputPin  26 
+#if DIMMERLOCAL
+#define outputPin  26
 #define zerocross  27 // for boards with CHANGEBLE input pins
 #endif
 
@@ -152,7 +165,7 @@
 //#define MQTT_CONNECT_TIMEOUT 20000 // 20 seconds
 //*************END not implemented /tested **********
 
-// Check which core Arduino is running on. This is done because updating the 
+// Check which core Arduino is running on. This is done because updating the
 // display only works from the Arduino core.
 #if CONFIG_FREERTOS_UNICORE
 #define ARDUINO_RUNNING_CORE 0
