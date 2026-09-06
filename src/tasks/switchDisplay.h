@@ -5,46 +5,92 @@
 
 #include "../config/config.h"
 
-//#ifdef  TTGO
-//#include <TFT_eSPI.h>
-//extern TFT_eSPI display;
-
-#define TFT_PIN 4 
+#define TFT_PIN 4
 extern DisplayValues gDisplayValues;
-extern Config config; 
+extern Config config;
+
+#ifdef TTGO
+extern volatile uint8_t gDisplayPage;
+extern volatile bool gDisplayForceRefresh;
+#endif
 
 void switchDisplay(void * parameter){
-int timer = millis();
+  unsigned long screenOnSince = millis();
+  unsigned long buttonDownSince = 0;
+  bool buttonDown = false;
 
-for(;;){
+  const unsigned long LONG_PRESS_MS = 800UL;
+  const unsigned long DEBOUNCE_MS = 40UL;
 
-if (digitalRead(TFT_PIN)==HIGH && config.ScreenTime !=0 ) { 
-    if ( millis() > timer + config.ScreenTime*1000 ) {
-      digitalWrite(TFT_PIN,LOW);
+  for(;;){
+    const unsigned long now = millis();
+    const bool buttonPressed = (digitalRead(SWITCH) == LOW);
+
+    // Detect the beginning of a physical button press.
+    if (buttonPressed && !buttonDown) {
+      buttonDown = true;
+      buttonDownSince = now;
     }
-}
 
+    // Act on button release so short and long presses are unambiguous.
+    if (!buttonPressed && buttonDown) {
+      const unsigned long pressDuration = now - buttonDownSince;
+      buttonDown = false;
 
-if (digitalRead(SWITCH)==LOW || gDisplayValues.screenstate == HIGH ){ // if right button is pressed or HTTP call 
-    if (digitalRead(TFT_PIN)==HIGH) {             // and the status flag is LOW
-      gDisplayValues.screenstate = LOW ;      
-      digitalWrite(TFT_PIN,LOW);     // and turn Off the OLED
-      }                           // 
-    else {                        // otherwise...
-      gDisplayValues.screenstate = LOW ;
-      digitalWrite(TFT_PIN,HIGH);      // and turn On  the OLED
-      if (config.ScreenTime !=0 ) {
-        timer = millis();
+      if (pressDuration >= DEBOUNCE_MS) {
+        const bool displayOn = (digitalRead(TFT_PIN) == HIGH);
+
+        if (!displayOn) {
+          // Any press wakes the display and returns to the main family page.
+          digitalWrite(TFT_PIN, HIGH);
+#ifdef TTGO
+          gDisplayPage = 0;
+          gDisplayForceRefresh = true;
+#endif
+          screenOnSince = now;
+        }
+        else if (pressDuration >= LONG_PRESS_MS) {
+          // Long press: keep the historical ability to switch the screen off.
+          digitalWrite(TFT_PIN, LOW);
+        }
+        else {
+#ifdef TTGO
+          // Short press: toggle family dashboard <-> diagnostic page.
+          gDisplayPage = (gDisplayPage == 0) ? 1 : 0;
+          gDisplayForceRefresh = true;
+#endif
+          screenOnSince = now;
+        }
       }
     }
-                  // wait a sec for the 
-  }                               // hardware to stabilize
 
+    // Preserve the existing HTTP-triggered screen toggle behaviour.
+    if (gDisplayValues.screenstate == HIGH) {
+      gDisplayValues.screenstate = LOW;
 
-  vTaskDelay(500 / portTICK_PERIOD_MS);
-  
+      if (digitalRead(TFT_PIN) == HIGH) {
+        digitalWrite(TFT_PIN, LOW);
+      }
+      else {
+        digitalWrite(TFT_PIN, HIGH);
+#ifdef TTGO
+        gDisplayPage = 0;
+        gDisplayForceRefresh = true;
+#endif
+        screenOnSince = now;
+      }
+    }
+
+    // Optional automatic screen timeout from the existing configuration.
+    if (digitalRead(TFT_PIN) == HIGH && config.ScreenTime != 0) {
+      if ((unsigned long)(now - screenOnSince) >=
+          (unsigned long)config.ScreenTime * 1000UL) {
+        digitalWrite(TFT_PIN, LOW);
+      }
+    }
+
+    vTaskDelay(50 / portTICK_PERIOD_MS);
   }
 }
 
-//#endif
 #endif
