@@ -41,7 +41,7 @@ void measureElectricityf(void * parameter)
                 DeserializationError error = deserializeJson(doc, payload);
 
                 long generatedPower = doc["Body"]["Data"]["Inverters"]["1"]["P"];
-                gDisplayValues.production  = generatedPower;
+                gDisplayValues.production = generatedPower;
             #else
                 gDisplayValues.froniusup = false;
                 Serial.println("gDisplayValues.froniusup = false");
@@ -56,20 +56,18 @@ void measureElectricityf(void * parameter)
                 DynamicJsonDocument doc2(1500);
                 error = deserializeJson(doc2, payload2);
 
-                long generatedPower2 = doc2["Body"]["Data"]["Site"]["P_Grid"];
-                gDisplayValues.watt = generatedPower2;
-                gDisplayValues.grid = generatedPower2;
+                long gridPower = doc2["Body"]["Data"]["Site"]["P_Grid"];
+                gDisplayValues.grid = gridPower;
                 gDisplayValues.froniusup = true;
             #else
                 gDisplayValues.froniusup = false;
             #endif
             http2.end();
-            Serial.print("generatedPower2 / function measure: ");
-            Serial.println(generatedPower2);
+
+            Serial.print("gridPower / function measure: ");
+            Serial.println(gDisplayValues.grid);
             Serial.print("gDisplayValues.production / function measure: ");
             Serial.println(gDisplayValues.production);
-            Serial.print("gDisplayValues.watt / function measure: ");
-            Serial.println(gDisplayValues.watt);
             Serial.print("gDisplayValues.grid / function measure: ");
             Serial.println(gDisplayValues.grid);
             Serial.print("gDisplayValues.froniusup / function measure: ");
@@ -81,7 +79,7 @@ void measureElectricityf(void * parameter)
         #if WIFI_ACTIVE == true
             Pow_mqtt_send++;
             if (Pow_mqtt_send > 10) {
-                Mqtt_send(String(config.IDX), String(int(gDisplayValues.watt)));  
+                Mqtt_send(String(config.IDX), String(int(gDisplayValues.grid)));  
                 Pow_mqtt_send = 0;
             }
         #endif
