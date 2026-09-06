@@ -2,9 +2,10 @@
 #define FRONIUS_ZERO_GRID_H
 
 // Fronius Zero Grid controller
-// V10 - adaptive real dimmer command
+// V11 - real HTTP dimmer command
 
 #include "config/enums.h"
+#include <HTTPClient.h>
 
 #define FRONIUS_GRID_MARGIN_W 20
 #define FRONIUS_HEATER_POWER_W 800
@@ -12,9 +13,30 @@
 #define FRONIUS_STEP_FAST 20
 #define FRONIUS_STEP_SLOW 5
 
+#define DIMMER_IP "192.168.100.29"
+#define DIMMER_MIN_CHANGE 2
+
 extern DisplayValues gDisplayValues;
 
 static int lastGrid = 0;
+static int lastSentDimmer = -1;
+
+void sendDimmerPower(int power)
+{
+    HTTPClient http;
+
+    String url = String("http://") + DIMMER_IP + "/?POWER=" + String(power);
+
+    http.begin(url);
+    int httpCode = http.GET();
+
+    Serial.print("Dimmer HTTP : ");
+    Serial.print(httpCode);
+    Serial.print(" POWER=");
+    Serial.println(power);
+
+    http.end();
+}
 
 void froniusZeroGridSimulation()
 {
@@ -34,7 +56,6 @@ void froniusZeroGridSimulation()
 
         int delta = targetDimmer - dimmer;
 
-        // Charge saturated: go immediately to maximum
         if (targetDimmer == FRONIUS_MAX_DIMMER && dimmer < FRONIUS_MAX_DIMMER)
             correction = FRONIUS_STEP_FAST;
         else if (abs(delta) > 40)
@@ -45,7 +66,6 @@ void froniusZeroGridSimulation()
             correction = delta;
     }
     else if (grid > FRONIUS_GRID_MARGIN_W) {
-        // Fast protection when a cloud arrives and power is imported
         correction = -FRONIUS_STEP_FAST;
     }
 
@@ -56,8 +76,14 @@ void froniusZeroGridSimulation()
 
     gDisplayValues.dimmer = dimmer;
 
+    // Real dimmer command only when change is significant
+    if (abs(gDisplayValues.dimmer - lastSentDimmer) >= DIMMER_MIN_CHANGE) {
+        sendDimmerPower(gDisplayValues.dimmer);
+        lastSentDimmer = gDisplayValues.dimmer;
+    }
+
     Serial.println();
-    Serial.println("========== FRONIUS ZERO GRID V10 ==========");
+    Serial.println("========== FRONIUS ZERO GRID V11 ==========");
     Serial.printf("PV production : %d W\n", production);
     Serial.printf("Grid exchange : %d W\n", grid);
     Serial.printf("Heater max    : %d W\n", FRONIUS_HEATER_POWER_W);
@@ -73,7 +99,7 @@ void froniusZeroGridSimulation()
         Serial.println("Status        : ZERO GRID OK");
 
     Serial.printf("Correction    : %d %%\n", correction);
-    Serial.println("Decision      : REAL DIMMER COMMAND");
+    Serial.println("Decision      : REAL HTTP DIMMER COMMAND");
     Serial.println("===========================================");
 
     lastGrid = grid;
