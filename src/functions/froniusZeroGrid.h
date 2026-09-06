@@ -3,14 +3,14 @@
 
 // Experimental Fronius Zero Grid controller
 // Simulation stage - no real dimmer command enabled yet.
-// V5 adaptive regulation for configurable heater power.
+// V6 adaptive regulation for 800W heater.
 
 #include "config/enums.h"
 
 // Positive P_Grid = import from grid
 // Negative P_Grid = export to grid
 
-#define FRONIUS_GRID_MARGIN_W 50
+#define FRONIUS_GRID_MARGIN_W 20
 #define FRONIUS_HEATER_POWER_W 800
 #define FRONIUS_MAX_DIMMER 100
 
@@ -24,10 +24,12 @@ void froniusZeroGridSimulation()
     int production = (int)gDisplayValues.production;
     int correction = 0;
     int targetPower = 0;
-    int wanted = 0;
+    int wanted = simulatedDimmer;
+
+    int surplus = 0;
 
     if (grid < -FRONIUS_GRID_MARGIN_W) {
-        int surplus = abs(grid);
+        surplus = abs(grid);
         targetPower = surplus;
         wanted = (surplus * 100) / FRONIUS_HEATER_POWER_W;
 
@@ -36,13 +38,16 @@ void froniusZeroGridSimulation()
 
         correction = wanted - simulatedDimmer;
 
-        if (abs(correction) > 20)
+        if (abs(correction) > 30)
             correction = (correction > 0) ? 10 : -10;
         else if (abs(correction) > 5)
-            correction = (correction > 0) ? 5 : -5;
+            correction = (correction > 0) ? 3 : -3;
+        else
+            correction = (correction > 0) ? 1 : (correction < 0 ? -1 : 0);
     }
     else if (grid > FRONIUS_GRID_MARGIN_W) {
-        correction = -8;
+        // Fast protection against cloud/import
+        correction = -10;
     }
 
     simulatedDimmer += correction;
@@ -55,7 +60,7 @@ void froniusZeroGridSimulation()
     gDisplayValues.dimmer = simulatedDimmer;
 
     Serial.println();
-    Serial.println("========== FRONIUS ZERO GRID SIMU V5 ==========");
+    Serial.println("========== FRONIUS ZERO GRID SIMU V6 ==========");
     Serial.print("PV production : ");
     Serial.print(production);
     Serial.println(" W");
@@ -75,7 +80,7 @@ void froniusZeroGridSimulation()
     if (grid < -FRONIUS_GRID_MARGIN_W) {
         Serial.println("Status        : SURPLUS PV");
         Serial.print("Surplus       : ");
-        Serial.print(abs(grid));
+        Serial.print(surplus);
         Serial.println(" W");
         Serial.print("Target dimmer : ");
         Serial.print(wanted);
