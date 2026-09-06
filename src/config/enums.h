@@ -32,13 +32,20 @@ struct DisplayValues {
   String temperature;
   double production;
   bool froniusup;
+  unsigned long froniusLastOkMs;
 
-  // Last state reported by the remote water-heater dimmer.
-  // These values are refreshed by the /state polling task and are used by
-  // the TTGO dashboard to confirm that the dimmer is really reachable.
+  // State reported by the remote RobotDyn water-heater dimmer (/state JSON).
   int dimmerReported;
+  int dimmerCommandReported;
   bool dimmerCommOk;
   unsigned long dimmerLastOkMs;
+  bool dimmerOn;
+  bool dimmerAlarm;
+  float dimmerPower;
+  float dimmerPtotal;
+  int dimmerRssi;
+  String dimmerAlert;
+  String dimmerVersion;
 };
 
 struct Config {
