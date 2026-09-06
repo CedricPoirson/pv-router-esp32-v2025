@@ -7,14 +7,17 @@
 
 #include "config/enums.h"
 
-// Positive P_Grid = import from grid (Fronius API)
+// Positive P_Grid = import from grid
 // Negative P_Grid = export to grid
 
 #define FRONIUS_GRID_TARGET_W 0
-#define FRONIUS_GRID_IMPORT_LIMIT_W 20
-#define FRONIUS_GRID_DEADBAND_W 10
+#define FRONIUS_GRID_MARGIN_W 20
+#define FRONIUS_HEATER_POWER_W 2400
+#define FRONIUS_MAX_DIMMER_STEP 2
 
 extern DisplayValues gDisplayValues;
+
+static int simulatedDimmer = 0;
 
 void froniusZeroGridSimulation()
 {
@@ -36,16 +39,31 @@ void froniusZeroGridSimulation()
     Serial.print(dimmer);
     Serial.println(" %");
 
-    if (grid > FRONIUS_GRID_IMPORT_LIMIT_W) {
+    if (grid < -FRONIUS_GRID_MARGIN_W) {
+        int surplus = abs(grid);
+        int target = (surplus * 100) / FRONIUS_HEATER_POWER_W;
+
+        simulatedDimmer += FRONIUS_MAX_DIMMER_STEP;
+        if (simulatedDimmer > target)
+            simulatedDimmer = target;
+
+        Serial.println("Status        : SURPLUS PV");
+        Serial.print("Surplus       : ");
+        Serial.print(surplus);
+        Serial.println(" W");
+        Serial.print("Target dimmer : ");
+        Serial.print(target);
+        Serial.println(" %");
+        Serial.print("Step applied  : +");
+        Serial.print(FRONIUS_MAX_DIMMER_STEP);
+        Serial.println(" %");
+    }
+    else if (grid > FRONIUS_GRID_MARGIN_W) {
         Serial.println("Status        : IMPORT RESEAU");
         Serial.println("Decision      : DIMMER DOWN (simulation)");
     }
-    else if (grid < -FRONIUS_GRID_DEADBAND_W) {
-        Serial.println("Status        : SURPLUS PV");
-        Serial.println("Decision      : DIMMER UP (simulation)");
-    }
     else {
-        Serial.println("Status        : ZONE ZERO GRID");
+        Serial.println("Status        : ZERO GRID OK");
         Serial.println("Decision      : HOLD");
     }
 
