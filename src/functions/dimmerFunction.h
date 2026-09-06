@@ -1,151 +1,204 @@
 #ifndef DIMMER_FUNCTIONS
 #define DIMMER_FUNCTIONS
 
+#include <Arduino.h>
 #include <WiFi.h>
+#include <HTTPClient.h>
+#include <math.h>
 #include "../config/enums.h"
 #include "../config/config.h"
 #include "../functions/spiffsFunctions.h"
 #include "../functions/Mqtt_http_Functions.h"
 
-#if DIMMERLOCAL 
-// Dimmer librairy 
-#include <RBDdimmer.h>   /// the corrected librairy  in RBDDimmer-master-corrected.rar , the original has a bug
-
-//***********************************
-//************* dimmer
-//***********************************
-
-
-dimmerLamp dimmer_hard(outputPin, zerocross); //initialase port for dimmer for ESP8266, ESP32, Arduino due boards
-int dimmer_security = 60;  // coupe le dimmer toute les X minutes en cas de probleme externe. 
-int dimmer_security_count = 0; 
-
+// Defaults are kept here so an existing private config.h continues to build.
+#ifndef DIMMER_RATED_POWER_W
+#define DIMMER_RATED_POWER_W 800.0f
 #endif
 
+#ifndef DIMMER_HTTP_TIMEOUT_MS
+#define DIMMER_HTTP_TIMEOUT_MS 500
+#endif
+
+#ifndef DIMMER_KEEPALIVE_MS
+#define DIMMER_KEEPALIVE_MS 60000UL
+#endif
+
+#ifndef FRONIUS_STALE_MS
+#define FRONIUS_STALE_MS 5000UL
+#endif
+
+#if DIMMERLOCAL
+// Dimmer library
+#include <RBDdimmer.h>   // corrected library in RBDDimmer-master-corrected.rar
+
+dimmerLamp dimmer_hard(outputPin, zerocross);
+#endif
 
 extern DisplayValues gDisplayValues;
+extern Config config;
 
-HTTPClient http;
+// Last command that was actually acknowledged by the remote dimmer.
+// -1 forces an initial command on boot.
+static int lastSuccessfulDimmerCommand = -1;
+static uint32_t lastSuccessfulDimmerCommandMs = 0;
+static bool dimmerFailsafeActive = true;
 
-/*
-*   fonction d'envoie de commande au dimmer
-*/
+/**
+ * Send an absolute POWER command to the remote RobotDyn dimmer.
+ * Firmware 20260514 API: GET /?POWER=<0..100>
+ *
+ * No blocking delay is used: a failed dimmer must never stall the router loop.
+ */
+bool dimmer_change(char dimmerurl[15], int dimmerIDX, int dimmervalue) {
+#if WIFI_ACTIVE == true
+  dimmervalue = constrain(dimmervalue, 0, 100);
 
-void dimmer_change(char dimmerurl[15], int dimmerIDX, int dimmervalue) {
-    /// envoyer la commande avec la valeur gDisplayValues.dimmer vers le dimmer config.dimmer
-    #if WIFI_ACTIVE == true
-    String baseurl; 
-      baseurl = "/?POWER=" + String(dimmervalue) ; 
-      http.begin(dimmerurl,80,baseurl);   
-      http.GET();
-      http.end(); 
-
-    #if MQTT_CLIENT == true 
-    /// A vérifier que c'est necessaire ( envoie double ? )
-      Mqtt_send(String(dimmerIDX), String(dimmervalue));  
-    #endif
-    
-    delay (2000); // delay de transmission réseau dimmer et application de la charge
-    #endif
-}
-
-
-//***********************************
-//************* Fonction aservissement autonome
-//***********************************
-
-void dimmer(){
-gDisplayValues.change = 0; 
-
-  // 0 -> linky ; 1-> injection  ; 2-> stabilisé
-
-  /// Linky 
-  // si grosse puissance instantanée sur le réseau, coupure du dimmer. ( ici 350w environ ) 
-  if ( gDisplayValues.watt >= 350 && gDisplayValues.dimmer != 0 )  {
-    gDisplayValues.dimmer = 0 ;  
-    gDisplayValues.change = 1 ;
-    Serial.print("gDisplayValues.dimmer mise à 0 - 1: ");
-    Serial.println(gDisplayValues.dimmer);
-    } 
-  
-  /// si gros mode linky  on reduit la puissance par extrapolation ( valeur de puissance supérieur à config.delta + 30 )
-  else if ( gDisplayValues.dimmer != 0 && gDisplayValues.watt >= (config.delta+30) ) {
-    gDisplayValues.dimmer += -2*((gDisplayValues.watt-config.delta)/(50*config.resistance/1000)) ; 
-    gDisplayValues.change = 1; 
-    } 
-  
-    /// si petit mode linky on reduit la puissance 
-  else if (gDisplayValues.watt >= (config.delta) && gDisplayValues.dimmer != 0 ) {
-    gDisplayValues.dimmer += -1 ; 
-    gDisplayValues.change = 1; 
-    }  
-  
-    // injection 
-    /// si grosse injection on augmente la puissance par extrapolation
-  else if ( gDisplayValues.watt <= (config.deltaneg-30) ) {   
-    gDisplayValues.dimmer += 2*abs(gDisplayValues.watt/(50*config.resistance/1000)) ; 
-    gDisplayValues.change = 1 ; 
-    } 
-  
-    /// si injection legère on augmente la puissance doucement
-  else if (gDisplayValues.watt <= (config.deltaneg)  ) { 
-    gDisplayValues.dimmer += 1 ; 
-    gDisplayValues.change = 1 ; 
-    }
-  
-    /// test puissance de sécurité 
-  if ( gDisplayValues.dimmer >= config.num_fuse ) {
-    gDisplayValues.dimmer = config.num_fuse; 
-    gDisplayValues.change = 1 ; 
-    }
-
-    /// valeur négative impossible
-  if ( gDisplayValues.dimmer <= 0 && gDisplayValues.dimmer != 0 ) {
-    gDisplayValues.dimmer = 0; 
-    gDisplayValues.change = 1 ; 
-        Serial.print("gDisplayValues.dimmer mise à 0 - 2: ");
-    Serial.println(gDisplayValues.dimmer);
-    }
-    
-    gDisplayValues.security ++ ;
-/*
-   //// envoie d'un Zero au dimmer de temps en temps pour des raisons de sécurité
-    if ( gDisplayValues.security >= 5 ) { 
-      if ( gDisplayValues.dimmer <= 0 ) {
-        gDisplayValues.dimmer = 0; 
-        gDisplayValues.change = 1 ; 
-        gDisplayValues.security = 0;  
-      }
-    } 
-*/
-  if  (gDisplayValues.change == 1 )  {
-    dimmer_change( config.dimmer, config.IDXdimmer, gDisplayValues.dimmer ) ; 
-
-    #if DIMMERLOCAL 
-    dimmer_hard.setPower(gDisplayValues.dimmer);
-    #endif
-
+  if (WiFi.status() != WL_CONNECTED) {
+    return false;
   }
 
-Serial.print("gDisplayValues.change : ");
-Serial.println(gDisplayValues.change);
-Serial.print("gDisplayValues.watt : ");
-Serial.println(gDisplayValues.watt);
-Serial.print("gDisplayValues.dimmer : ");
-Serial.println(gDisplayValues.dimmer);
-Serial.print("gDisplayValues.security: ");
-Serial.println(gDisplayValues.security);
-}
+  HTTPClient dimmerHttp;
+  dimmerHttp.setConnectTimeout(DIMMER_HTTP_TIMEOUT_MS);
+  dimmerHttp.setTimeout(DIMMER_HTTP_TIMEOUT_MS);
 
-#if DIMMERLOCAL 
-void Dimmer_setup() {
-  // configuration dimmer
-  dimmer_hard.begin(NORMAL_MODE, ON); //dimmer initialisation: name.begin(MODE, STATE) 
-  dimmer_hard.setPower(0); 
-  serial_println("Dimmer started...");
+  String path = "/?POWER=" + String(dimmervalue);
+  if (!dimmerHttp.begin(dimmerurl, 80, path)) {
+    return false;
+  }
 
-}
+  const int httpCode = dimmerHttp.GET();
+  dimmerHttp.end();
+
+  if (httpCode < 200 || httpCode >= 300) {
+    Serial.print(F("Dimmer HTTP command failed, code="));
+    Serial.println(httpCode);
+    return false;
+  }
+
+  lastSuccessfulDimmerCommand = dimmervalue;
+  lastSuccessfulDimmerCommandMs = millis();
+
+#if MQTT_CLIENT == true
+  // MQTT is telemetry only. It is never required for regulation.
+  Mqtt_send(String(dimmerIDX), String(dimmervalue));
 #endif
 
+  return true;
+#else
+  (void)dimmerurl;
+  (void)dimmerIDX;
+  (void)dimmervalue;
+  return false;
+#endif
+}
+
+/**
+ * Autonomous closed-loop regulation using Fronius Site/P_Grid.
+ *
+ * Fronius convention used by the existing router:
+ *   P_Grid > 0 : importing from the grid
+ *   P_Grid < 0 : exporting surplus
+ *
+ * The controllable surplus is the power already sent to the heater minus
+ * P_Grid. This makes the requested POWER percentage absolute while avoiding
+ * the 0%/surplus oscillation that would occur if only -P_Grid were used once
+ * the heater is already consuming energy.
+ */
+void dimmer() {
+  gDisplayValues.change = 0;
+  const uint32_t now = millis();
+
+  const bool froniusFresh =
+      gDisplayValues.froniusup &&
+      gDisplayValues.froniusLastOkMs != 0 &&
+      (uint32_t)(now - gDisplayValues.froniusLastOkMs) <= FRONIUS_STALE_MS;
+
+  // Fail safe: loss/stale Fronius data, voluntary routing stop, or a dimmer
+  // alarm/off state always drives the requested power to zero.
+  const bool remoteSafetyStop =
+      gDisplayValues.dimmerOnline &&
+      (!gDisplayValues.dimmerOn || gDisplayValues.dimmerAlarm);
+
+  if (!froniusFresh || !config.autonome || remoteSafetyStop) {
+    gDisplayValues.dimmer = 0;
+
+    const bool mustSendZero =
+        lastSuccessfulDimmerCommand != 0 ||
+        !dimmerFailsafeActive ||
+        (uint32_t)(now - lastSuccessfulDimmerCommandMs) >= DIMMER_KEEPALIVE_MS;
+
+    if (mustSendZero) {
+      gDisplayValues.change = 1;
+      dimmer_change(config.dimmer, config.IDXdimmer, 0);
+#if DIMMERLOCAL
+      dimmer_hard.setPower(0);
+#endif
+    }
+
+    dimmerFailsafeActive = true;
+    return;
+  }
+
+  dimmerFailsafeActive = false;
+
+  // Use the last acknowledged command as the heater power already included in
+  // the Fronius grid measurement. At first valid measurement, fall back to the
+  // current requested value (normally 0 after boot).
+  const int currentPct =
+      (lastSuccessfulDimmerCommand >= 0)
+          ? lastSuccessfulDimmerCommand
+          : constrain(gDisplayValues.dimmer, 0, 100);
+
+  const float currentDimmerW = DIMMER_RATED_POWER_W * currentPct / 100.0f;
+  const float availableSurplusW = currentDimmerW - (float)gDisplayValues.watt;
+
+  int requestedPct = (int)lroundf(availableSurplusW * 100.0f / DIMMER_RATED_POWER_W);
+  requestedPct = constrain(requestedPct, 0, 100);
+
+  // Preserve the existing configurable maximum-power safety limit.
+  if (config.num_fuse > 0 && requestedPct > config.num_fuse) {
+    requestedPct = config.num_fuse;
+  }
+
+  gDisplayValues.dimmer = requestedPct;
+
+  const bool changedByAtLeastOnePct =
+      lastSuccessfulDimmerCommand < 0 ||
+      abs(requestedPct - lastSuccessfulDimmerCommand) >= 1;
+
+  const bool keepaliveDue =
+      lastSuccessfulDimmerCommandMs == 0 ||
+      (uint32_t)(now - lastSuccessfulDimmerCommandMs) >= DIMMER_KEEPALIVE_MS;
+
+  if (changedByAtLeastOnePct || keepaliveDue) {
+    gDisplayValues.change = 1;
+    const bool sent = dimmer_change(config.dimmer, config.IDXdimmer, requestedPct);
+
+#if DIMMERLOCAL
+    if (sent) {
+      dimmer_hard.setPower(requestedPct);
+    }
+#endif
+  }
+
+#if DEBUG == true
+  Serial.print(F("P_Grid W: "));
+  Serial.print(gDisplayValues.watt);
+  Serial.print(F(" | available W: "));
+  Serial.print(availableSurplusW);
+  Serial.print(F(" | POWER %: "));
+  Serial.print(requestedPct);
+  Serial.print(F(" | Fronius OK: "));
+  Serial.println(froniusFresh ? F("yes") : F("no"));
+#endif
+}
+
+#if DIMMERLOCAL
+void Dimmer_setup() {
+  dimmer_hard.begin(NORMAL_MODE, ON);
+  dimmer_hard.setPower(0);
+  serial_println("Dimmer started...");
+}
+#endif
 
 #endif
