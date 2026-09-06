@@ -10,7 +10,6 @@
 #include "functions/dimmerFunction.h"
 #include "functions/drawFunctions.h"
 
-// Fronius Inverter
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 
@@ -20,12 +19,14 @@ extern Config config;
 int Pow_mqtt_send = 0;
 
 // Incremented only after a complete, validated PowerFlow sample has been
-// written to gDisplayValues. The dimmer task uses this counter to react once
-// per fresh Fronius sample instead of waiting on an unrelated 5 s timer.
+// written to gDisplayValues. The dimmer task reacts once per fresh sample.
 volatile uint32_t gFroniusSampleCounter = 0;
 
 void measureElectricityf(void * parameter)
 {
+    bool froniusStateKnown = false;
+    bool previousFroniusOk = false;
+
     for (;;) {
 #if WIFI_ACTIVE == true
         HTTPClient http;
@@ -36,9 +37,8 @@ void measureElectricityf(void * parameter)
         http.begin(url);
         int httpCode = http.GET();
 
-        Serial.printf("httpCode / function measure: %d\n", httpCode);
-
         bool validFroniusSample = false;
+        String errorReason = "unknown";
 
         if (httpCode == HTTP_CODE_OK) {
             String payload = http.getString();
@@ -52,8 +52,6 @@ void measureElectricityf(void * parameter)
                 if (apiStatus == 0 && !gridValue.isNull()) {
                     gDisplayValues.grid = gridValue.as<double>();
 
-                    // Prefer Site.P_PV from the same PowerFlow response.
-                    // Fall back to inverter 1 power for older/variant responses.
                     JsonVariant pvValue = doc["Body"]["Data"]["Site"]["P_PV"];
                     if (!pvValue.isNull()) {
                         gDisplayValues.production = pvValue.as<double>();
@@ -67,15 +65,18 @@ void measureElectricityf(void * parameter)
                     validFroniusSample = true;
                 }
                 else {
-                    Serial.printf("Fronius API invalid: Status.Code=%d P_Grid=%s\n",
-                                  apiStatus,
-                                  gridValue.isNull() ? "null" : "present");
+                    errorReason = "API Status.Code=" + String(apiStatus);
+                    if (gridValue.isNull())
+                        errorReason += " P_Grid=null";
                 }
             }
             else {
-                Serial.print("Fronius JSON error: ");
-                Serial.println(error.c_str());
+                errorReason = "JSON ";
+                errorReason += error.c_str();
             }
+        }
+        else {
+            errorReason = "HTTP " + String(httpCode);
         }
 
         http.end();
@@ -83,16 +84,20 @@ void measureElectricityf(void * parameter)
         gDisplayValues.froniusup = validFroniusSample;
 
         if (validFroniusSample) {
-            // Publish the sample only after every value above is complete.
             gFroniusSampleCounter++;
-            Serial.printf("[FRONIUS #%lu] PV=%.0f W GRID=%.0f W OK=1\n",
-                          (unsigned long)gFroniusSampleCounter,
-                          gDisplayValues.production,
-                          gDisplayValues.grid);
+
+            if (!froniusStateKnown || !previousFroniusOk) {
+                Serial.printf("[FRONIUS] ONLINE PV=%.0f W GRID=%.0f W\n",
+                              gDisplayValues.production,
+                              gDisplayValues.grid);
+            }
         }
-        else {
-            Serial.println("[FRONIUS] sample invalid - control disabled for this cycle");
+        else if (!froniusStateKnown || previousFroniusOk) {
+            Serial.printf("[FRONIUS] OFFLINE (%s)\n", errorReason.c_str());
         }
+
+        froniusStateKnown = true;
+        previousFroniusOk = validFroniusSample;
 
         Pow_mqtt_send++;
         if (Pow_mqtt_send > 10) {
