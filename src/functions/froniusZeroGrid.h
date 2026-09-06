@@ -3,7 +3,7 @@
 
 // Experimental Fronius Zero Grid controller
 // Simulation stage - no real dimmer command enabled yet.
-// Virtual dimmer follows calculated target for validation.
+// V3 regulation simulation with proportional correction.
 
 #include "config/enums.h"
 
@@ -14,7 +14,7 @@
 #define FRONIUS_GRID_MARGIN_W 20
 #define FRONIUS_HEATER_POWER_W 2400
 #define FRONIUS_MAX_DIMMER_STEP 2
-#define FRONIUS_IMPORT_STEP 5
+#define FRONIUS_IMPORT_STEP 2
 
 extern DisplayValues gDisplayValues;
 
@@ -24,33 +24,39 @@ void froniusZeroGridSimulation()
 {
     int grid = (int)gDisplayValues.grid;
     int production = (int)gDisplayValues.production;
+    int target = simulatedDimmer;
+    int correction = 0;
 
-    int target = 0;
-
+    // Surplus PV: increase load progressively
     if (grid < -FRONIUS_GRID_MARGIN_W) {
         int surplus = abs(grid);
-        target = (surplus * 100) / FRONIUS_HEATER_POWER_W;
-        if (target > 100)
-            target = 100;
+        int wanted = (surplus * 100) / FRONIUS_HEATER_POWER_W;
 
-        if (simulatedDimmer < target) {
-            simulatedDimmer += FRONIUS_MAX_DIMMER_STEP;
-            if (simulatedDimmer > target)
-                simulatedDimmer = target;
-        }
+        if (wanted > 100)
+            wanted = 100;
+
+        correction = wanted - simulatedDimmer;
+
+        if (correction > FRONIUS_MAX_DIMMER_STEP)
+            correction = FRONIUS_MAX_DIMMER_STEP;
+
+        simulatedDimmer += correction;
     }
+    // Grid import: reduce load progressively
     else if (grid > FRONIUS_GRID_MARGIN_W) {
-        target = 0;
-        simulatedDimmer -= FRONIUS_IMPORT_STEP;
-        if (simulatedDimmer < 0)
-            simulatedDimmer = 0;
+        correction = -FRONIUS_IMPORT_STEP;
+        simulatedDimmer += correction;
     }
 
-    // Virtual feedback only for validation
+    if (simulatedDimmer < 0)
+        simulatedDimmer = 0;
+    if (simulatedDimmer > 100)
+        simulatedDimmer = 100;
+
     gDisplayValues.dimmer = simulatedDimmer;
 
     Serial.println();
-    Serial.println("========== FRONIUS ZERO GRID SIMU ==========");
+    Serial.println("========== FRONIUS ZERO GRID SIMU V3 ==========");
 
     Serial.print("PV production : ");
     Serial.print(production);
@@ -77,12 +83,12 @@ void froniusZeroGridSimulation()
         Serial.println("Status        : ZERO GRID OK");
     }
 
-    Serial.print("Target dimmer : ");
-    Serial.print(target);
+    Serial.print("Correction    : ");
+    Serial.print(correction);
     Serial.println(" %");
 
     Serial.println("Decision      : VIRTUAL DIMMER UPDATE");
-    Serial.println("============================================");
+    Serial.println("===============================================");
 }
 
 #endif
