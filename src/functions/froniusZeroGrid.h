@@ -2,12 +2,13 @@
 #define FRONIUS_ZERO_GRID_H
 
 // Fronius Zero Grid controller
-// V13.3 - regulate from actual dimmer state when fresh + command resync
+// V13.4 - RobotDyn firmware 20260514 integration + fail-safe watchdog
 // Positive P_Grid = import from grid
 // Negative P_Grid = export to grid
 
 #include "config/enums.h"
 #include <HTTPClient.h>
+#include <WiFi.h>
 
 #define FRONIUS_HEATER_POWER_W 800
 #define FRONIUS_MAX_DIMMER 100
@@ -19,20 +20,24 @@
 
 #define DIMMER_IP "192.168.100.29"
 #define DIMMER_MIN_CHANGE 1
-#define DIMMER_HTTP_TIMEOUT_MS 1500
-#define DIMMER_REFRESH_MS 20000UL
+#define DIMMER_HTTP_TIMEOUT_MS 500UL
+#define DIMMER_REFRESH_MS 60000UL
+#define DIMMER_FAILSAFE_RETRY_MS 1000UL
 
 // If the dimmer reports a value that stays far from the requested command,
 // force an HTTP resend instead of waiting only for the periodic refresh.
 #define DIMMER_SYNC_TOLERANCE_PERCENT 10
 #define DIMMER_SYNC_MISMATCH_MS 15000UL
-#define DIMMER_STATE_FRESH_MS 15000UL
+#define DIMMER_STATE_FRESH_MS 10000UL
+#define FRONIUS_STALE_MS 4000UL
 
 extern DisplayValues gDisplayValues;
 
 static int lastSentDimmer = -1;
 static unsigned long lastDimmerSendMs = 0;
 static unsigned long dimmerMismatchSinceMs = 0;
+static unsigned long lastFailsafeAttemptMs = 0;
+static bool dimmerFailsafeActive = true;
 static int lastZeroGridState = -1;
 
 enum ZeroGridState {
@@ -44,24 +49,69 @@ enum ZeroGridState {
 
 bool sendDimmerPower(int power)
 {
-    HTTPClient http;
-    String url = String("http://") + DIMMER_IP + "/?POWER=" + String(power);
+    power = constrain(power, 0, 100);
 
+    if (WiFi.status() != WL_CONNECTED)
+        return false;
+
+    HTTPClient http;
+    const String url = String("http://") + DIMMER_IP + "/?POWER=" + String(power);
+
+    http.setConnectTimeout(DIMMER_HTTP_TIMEOUT_MS);
     http.setTimeout(DIMMER_HTTP_TIMEOUT_MS);
-    http.begin(url);
-    int httpCode = http.GET();
+
+    if (!http.begin(url))
+        return false;
+
+    const int httpCode = http.GET();
     http.end();
 
-    if (httpCode != HTTP_CODE_OK) {
+    const bool ok = httpCode >= 200 && httpCode < 300;
+    if (!ok) {
         Serial.printf("[DIMMER] HTTP ERROR=%d POWER=%d\n", httpCode, power);
     }
 
-    return httpCode == HTTP_CODE_OK;
+    return ok;
+}
+
+// Fail-safe used for invalid/stale Fronius data, voluntary routing stop,
+// or a safety condition reported by the dimmer. POWER=0 is sent immediately
+// on entry, then retried every second after a failed request and refreshed
+// every 60 s once acknowledged (RobotDyn AUTO_OFF is 5 minutes).
+void froniusZeroGridFailsafe(const char *reason)
+{
+    const unsigned long now = millis();
+    gDisplayValues.dimmer = 0;
+
+    const bool firstEntry = !dimmerFailsafeActive;
+    const bool zeroNotAcknowledged = lastSentDimmer != 0;
+    const bool retryDue =
+        lastFailsafeAttemptMs == 0 ||
+        ((unsigned long)(now - lastFailsafeAttemptMs) >= DIMMER_FAILSAFE_RETRY_MS);
+    const bool refreshDue =
+        lastSentDimmer == 0 &&
+        ((unsigned long)(now - lastDimmerSendMs) >= DIMMER_REFRESH_MS);
+
+    if ((firstEntry || zeroNotAcknowledged || refreshDue) && retryDue) {
+        lastFailsafeAttemptMs = now;
+
+        if (sendDimmerPower(0)) {
+            lastSentDimmer = 0;
+            lastDimmerSendMs = now;
+            Serial.printf("[FAILSAFE] POWER=0 (%s)\n", reason);
+        }
+    }
+
+    dimmerMismatchSinceMs = 0;
+    dimmerFailsafeActive = true;
 }
 
 // Name kept for compatibility with the existing Dimmer task.
 void froniusZeroGridSimulation()
 {
+    dimmerFailsafeActive = false;
+    lastFailsafeAttemptMs = 0;
+
     const int grid = (int)gDisplayValues.grid;
     const int commandedDimmer = gDisplayValues.dimmer;
     const unsigned long now = millis();
@@ -147,8 +197,6 @@ void froniusZeroGridSimulation()
             lastSentDimmer = gDisplayValues.dimmer;
             lastDimmerSendMs = now;
 
-            // A persistent mismatch may still be present after the resend.
-            // Restart the 15 s observation window before trying again.
             if (mismatchResyncDue)
                 dimmerMismatchSinceMs = now;
 
