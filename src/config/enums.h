@@ -22,16 +22,23 @@ struct DisplayValues {
   DEVICE_STATE currentState;
   String IP;
   String time;
-  bool injection; 
+  bool injection;
   int dimmer;
-  int security; 
+  int security;
   int change;
   bool task;
-  bool porteuse; 
-  bool screenstate; 
+  bool porteuse;
+  bool screenstate;
   String temperature;
   double production;
   bool froniusup;
+
+  // Last state reported by the remote water-heater dimmer.
+  // These values are refreshed by the /state polling task and are used by
+  // the TTGO dashboard to confirm that the dimmer is really reachable.
+  int dimmerReported;
+  bool dimmerCommOk;
+  unsigned long dimmerLastOkMs;
 };
 
 struct Config {
@@ -58,16 +65,15 @@ struct Config {
   int IDXdimmer;
   int tmax;
   int resistance;
-  bool polarity; 
+  bool polarity;
   char Publish[100];
-  int  ScreenTime;
+  int ScreenTime;
 };
 
 struct Configwifi {
   char SID[32];
   char passwd[64];
 };
-
 
 #if DEBUG == true
   #define serial_print(x)  Serial.print (x)
