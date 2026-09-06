@@ -195,7 +195,7 @@ static void drawTTGOZeroGridDashboard()
   const bool dimmerFresh =
       gDisplayValues.dimmerCommOk &&
       gDisplayValues.dimmerLastOkMs > 0 &&
-      ((unsigned long)(now - gDisplayValues.dimmerLastOkMs) <= 45000UL);
+      ((unsigned long)(now - gDisplayValues.dimmerLastOkMs) <= 15000UL);
 
   // Power actually reported by the remote dimmer.
   // If its state is stale, do not count heater power as releasable capacity.
@@ -392,7 +392,7 @@ static void drawTTGODiagnosticPage()
   const bool dimmerFresh =
       gDisplayValues.dimmerCommOk &&
       gDisplayValues.dimmerLastOkMs > 0 &&
-      ((unsigned long)(now - gDisplayValues.dimmerLastOkMs) <= 45000UL);
+      ((unsigned long)(now - gDisplayValues.dimmerLastOkMs) <= 15000UL);
 
   const int rssi = WiFi.isConnected() ? WiFi.RSSI() : -127;
   int wifiColor = TFT_RED;
@@ -455,7 +455,7 @@ void updateDisplay(void * parameter){
 #ifdef TTGO
     const unsigned long now = millis();
     if (gDisplayForceRefresh ||
-        (unsigned long)(now - lastDrawMs) >= 5000UL) {
+        (unsigned long)(now - lastDrawMs) >= 2000UL) {
       serial_println(F("lcd task"));
       gDisplayForceRefresh = false;
 
@@ -467,8 +467,8 @@ void updateDisplay(void * parameter){
       lastDrawMs = now;
     }
 
-    // Poll frequently so a short button press changes page immediately,
-    // while the actual TFT redraw remains at 5 s unless forced.
+    // Poll frequently so a short button press or fresh dimmer feedback changes
+    // the page/content immediately; periodic redraw is limited to 2 seconds.
     vTaskDelay(100 / portTICK_PERIOD_MS);
 
 #elif defined(DEVKIT1)
