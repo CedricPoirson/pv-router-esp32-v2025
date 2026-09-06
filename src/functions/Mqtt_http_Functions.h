@@ -15,7 +15,7 @@ extern DisplayValues gDisplayValues;
 void Mqtt_send(String sensor, String value);
 
 void publishHADiscovery() {
-  String sensors[] = {"pvrouter-production", "pvrouter-consumption", "pvrouter-surplus"};
+  String sensors[] = {"pvrouter-production", "pvrouter-consumption", "pvrouter-surplus", "pvrouter-grid"};
 
   for (String sensor : sensors) {
     String config = "homeassistant/sensor/" + sensor + "/config";
@@ -52,6 +52,7 @@ void reconnect() {
       Mqtt_send("pvrouter-production", String(int(gDisplayValues.production)));
       Mqtt_send("pvrouter-consumption", String(int(gDisplayValues.watt)));
       Mqtt_send("pvrouter-surplus", String(int(gDisplayValues.surplus)));
+      Mqtt_send("pvrouter-grid", String(int(gDisplayValues.grid)));
 
       client.publish("homeassistant/binary_sensor/pvrouter-fronius/state", gDisplayValues.froniusup ? "ON" : "OFF", true);
     }
