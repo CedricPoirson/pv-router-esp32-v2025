@@ -2,7 +2,7 @@
 #define FRONIUS_ZERO_GRID_H
 
 // Fronius Zero Grid controller
-// V12 - direct closed-loop control from P_Grid
+// V12.2 - direct closed-loop control from P_Grid + periodic dimmer refresh
 // Positive P_Grid = import from grid
 // Negative P_Grid = export to grid
 
@@ -21,9 +21,15 @@
 #define DIMMER_MIN_CHANGE 1
 #define DIMMER_HTTP_TIMEOUT_MS 1500
 
+// Even when the requested power does not change, resend it periodically.
+// This keeps the remote ESP8266 synchronized if it restarts or if it has a
+// communication watchdog, without spamming it on every Fronius sample.
+#define DIMMER_REFRESH_MS 20000UL
+
 extern DisplayValues gDisplayValues;
 
 static int lastSentDimmer = -1;
+static unsigned long lastDimmerSendMs = 0;
 
 bool sendDimmerPower(int power)
 {
@@ -50,7 +56,7 @@ void froniusZeroGridSimulation()
     int targetHeaterPower = (FRONIUS_HEATER_POWER_W * dimmer) / 100;
     int powerCorrection = 0;
 
-    const int gridLow = FRONIUS_GRID_TARGET_W - FRONIUS_GRID_DEADBAND_W;   // -20 W
+    const int gridLow = FRONIUS_GRID_TARGET_W - FRONIUS_GRID_DEADBAND_W;    // -20 W
     const int gridHigh = FRONIUS_GRID_TARGET_W + FRONIUS_GRID_DEADBAND_W;  //   0 W
 
     // Only correct outside the desired -20..0 W band.
@@ -77,20 +83,30 @@ void froniusZeroGridSimulation()
     const int correction = targetDimmer - dimmer;
     gDisplayValues.dimmer = targetDimmer;
 
+    const unsigned long now = millis();
+    const bool valueChanged =
+        (lastSentDimmer < 0) ||
+        (abs(gDisplayValues.dimmer - lastSentDimmer) >= DIMMER_MIN_CHANGE);
+    const bool refreshDue =
+        (lastSentDimmer >= 0) &&
+        ((unsigned long)(now - lastDimmerSendMs) >= DIMMER_REFRESH_MS);
+
     bool commandSent = false;
     bool commandOk = true;
 
-    if (abs(gDisplayValues.dimmer - lastSentDimmer) >= DIMMER_MIN_CHANGE) {
+    if (valueChanged || refreshDue) {
         commandSent = true;
         commandOk = sendDimmerPower(gDisplayValues.dimmer);
 
         // Retry on the next control cycle if the ESP8266 did not answer.
-        if (commandOk)
+        if (commandOk) {
             lastSentDimmer = gDisplayValues.dimmer;
+            lastDimmerSendMs = now;
+        }
     }
 
     Serial.println();
-    Serial.println("========== FRONIUS ZERO GRID V12 ==========");
+    Serial.println("========== FRONIUS ZERO GRID V12.2 ==========");
     Serial.printf("PV production : %d W\n", production);
     Serial.printf("Grid exchange : %d W\n", grid);
     Serial.printf("Grid target   : %d W (band %d..%d W)\n",
@@ -109,12 +125,21 @@ void froniusZeroGridSimulation()
     else
         Serial.println("Status        : ZERO GRID OK -> HOLD");
 
-    if (commandSent)
-        Serial.printf("Dimmer output : %s\n", commandOk ? "HTTP OK" : "HTTP ERROR - RETRY NEXT CYCLE");
-    else
-        Serial.println("Dimmer output : HOLD - no HTTP needed");
+    if (commandSent) {
+        if (commandOk)
+            Serial.printf("Dimmer output : HTTP OK (%s)\n",
+                          valueChanged ? "new target" : "periodic refresh");
+        else
+            Serial.println("Dimmer output : HTTP ERROR - RETRY NEXT SAMPLE");
+    }
+    else {
+        unsigned long ageMs = (lastSentDimmer >= 0) ? (now - lastDimmerSendMs) : 0;
+        Serial.printf("Dimmer output : ACTIVE %d %% - no resend needed (age %lu s)\n",
+                      lastSentDimmer,
+                      ageMs / 1000UL);
+    }
 
-    Serial.println("===========================================");
+    Serial.println("=============================================");
 }
 
 #endif
