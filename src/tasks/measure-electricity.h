@@ -10,7 +10,6 @@
 #include "functions/dimmerFunction.h"
 #include "functions/drawFunctions.h"
 
-// Fronius Inverter
 #include "HTTPClient.h"
 #include <ArduinoJson.h>
 
@@ -21,6 +20,9 @@ int Pow_mqtt_send = 0;
 
 void measureElectricityf(void * parameter)
 {
+    static long lastLoadPower = 0;
+    static long lastProduction = 0;
+
     for(;;){
 
         #if WIFI_ACTIVE == true
@@ -44,28 +46,36 @@ void measureElectricityf(void * parameter)
 
                     JsonObject site = doc["Body"]["Data"]["Site"];
 
-                    // Fronius production power
-                    long generatedPower = 0;
+                    long generatedPower = lastProduction;
+
                     if (!site["P_PV"].isNull()) {
                         generatedPower = site["P_PV"];
-                    } else if (doc["Body"]["Data"]["Inverters"].containsKey("1")) {
+                    }
+                    else if (doc["Body"]["Data"]["Inverters"].containsKey("1")) {
                         generatedPower = doc["Body"]["Data"]["Inverters"]["1"]["P"];
                     }
+
+                    lastProduction = generatedPower;
                     gDisplayValues.production = generatedPower;
 
-                    // House consumption (positive value)
-                    long loadPower = site["P_Load"] | 0;
-                    gDisplayValues.watt = abs(loadPower);
+                    long loadPower = lastLoadPower;
+                    if (!site["P_Load"].isNull()) {
+                        loadPower = abs((long)site["P_Load"]);
+                    }
 
+                    lastLoadPower = loadPower;
+                    gDisplayValues.watt = loadPower;
                     gDisplayValues.froniusup = true;
 
                 } else {
                     Serial.println("Fronius JSON error or invalid status");
-                    gDisplayValues.production = 0;
+                    gDisplayValues.production = lastProduction;
+                    gDisplayValues.watt = lastLoadPower;
                 }
             } else {
                 Serial.println("Fronius API unavailable");
-                gDisplayValues.production = 0;
+                gDisplayValues.production = lastProduction;
+                gDisplayValues.watt = lastLoadPower;
             }
 
             http.end();
