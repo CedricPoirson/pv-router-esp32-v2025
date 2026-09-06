@@ -2,107 +2,119 @@
 #define FRONIUS_ZERO_GRID_H
 
 // Fronius Zero Grid controller
-// V11 - real HTTP dimmer command
+// V12 - direct closed-loop control from P_Grid
+// Positive P_Grid = import from grid
+// Negative P_Grid = export to grid
 
 #include "config/enums.h"
 #include <HTTPClient.h>
 
-#define FRONIUS_GRID_MARGIN_W 20
 #define FRONIUS_HEATER_POWER_W 800
 #define FRONIUS_MAX_DIMMER 100
-#define FRONIUS_STEP_FAST 20
-#define FRONIUS_STEP_SLOW 5
+
+// Aim for a very small permanent export so short variations do not
+// immediately become grid import. Accepted band: -20 W .. 0 W.
+#define FRONIUS_GRID_TARGET_W -10
+#define FRONIUS_GRID_DEADBAND_W 10
 
 #define DIMMER_IP "192.168.100.29"
-#define DIMMER_MIN_CHANGE 2
+#define DIMMER_MIN_CHANGE 1
+#define DIMMER_HTTP_TIMEOUT_MS 1500
 
 extern DisplayValues gDisplayValues;
 
-static int lastGrid = 0;
 static int lastSentDimmer = -1;
 
-void sendDimmerPower(int power)
+bool sendDimmerPower(int power)
 {
     HTTPClient http;
-
     String url = String("http://") + DIMMER_IP + "/?POWER=" + String(power);
 
+    http.setTimeout(DIMMER_HTTP_TIMEOUT_MS);
     http.begin(url);
     int httpCode = http.GET();
-
-    Serial.print("Dimmer HTTP : ");
-    Serial.print(httpCode);
-    Serial.print(" POWER=");
-    Serial.println(power);
-
     http.end();
+
+    Serial.printf("Dimmer HTTP : %d POWER=%d\n", httpCode, power);
+    return httpCode == HTTP_CODE_OK;
 }
 
+// Name kept for compatibility with the existing Dimmer task.
 void froniusZeroGridSimulation()
 {
-    int grid = (int)gDisplayValues.grid;
-    int production = (int)gDisplayValues.production;
-    int dimmer = gDisplayValues.dimmer;
+    const int grid = (int)gDisplayValues.grid;
+    const int production = (int)gDisplayValues.production;
+    const int dimmer = gDisplayValues.dimmer;
+
     int targetDimmer = dimmer;
-    int correction = 0;
-    int surplus = 0;
+    int targetHeaterPower = (FRONIUS_HEATER_POWER_W * dimmer) / 100;
+    int powerCorrection = 0;
 
-    if (grid < -FRONIUS_GRID_MARGIN_W) {
-        surplus = abs(grid);
-        targetDimmer = (surplus * 100) / FRONIUS_HEATER_POWER_W;
+    const int gridLow = FRONIUS_GRID_TARGET_W - FRONIUS_GRID_DEADBAND_W;   // -20 W
+    const int gridHigh = FRONIUS_GRID_TARGET_W + FRONIUS_GRID_DEADBAND_W;  //   0 W
 
-        if (targetDimmer > FRONIUS_MAX_DIMMER)
-            targetDimmer = FRONIUS_MAX_DIMMER;
+    // Only correct outside the desired -20..0 W band.
+    if (grid < gridLow || grid > gridHigh) {
+        const int currentHeaterPower = (FRONIUS_HEATER_POWER_W * dimmer) / 100;
 
-        int delta = targetDimmer - dimmer;
+        // Increasing heater power moves P_Grid in the positive direction.
+        // Example: grid=-600 W, target=-10 W => add about 590 W of load.
+        powerCorrection = FRONIUS_GRID_TARGET_W - grid;
+        targetHeaterPower = currentHeaterPower + powerCorrection;
 
-        if (targetDimmer == FRONIUS_MAX_DIMMER && dimmer < FRONIUS_MAX_DIMMER)
-            correction = FRONIUS_STEP_FAST;
-        else if (abs(delta) > 40)
-            correction = (delta > 0) ? FRONIUS_STEP_FAST : -FRONIUS_STEP_FAST;
-        else if (abs(delta) > 10)
-            correction = (delta > 0) ? FRONIUS_STEP_SLOW : -FRONIUS_STEP_SLOW;
-        else
-            correction = delta;
+        if (targetHeaterPower < 0)
+            targetHeaterPower = 0;
+        if (targetHeaterPower > FRONIUS_HEATER_POWER_W)
+            targetHeaterPower = FRONIUS_HEATER_POWER_W;
+
+        targetDimmer = (targetHeaterPower * 100 + (FRONIUS_HEATER_POWER_W / 2)) /
+                       FRONIUS_HEATER_POWER_W;
     }
-    else if (grid > FRONIUS_GRID_MARGIN_W) {
-        correction = -FRONIUS_STEP_FAST;
-    }
 
-    dimmer += correction;
+    if (targetDimmer < 0) targetDimmer = 0;
+    if (targetDimmer > FRONIUS_MAX_DIMMER) targetDimmer = FRONIUS_MAX_DIMMER;
 
-    if (dimmer < 0) dimmer = 0;
-    if (dimmer > FRONIUS_MAX_DIMMER) dimmer = FRONIUS_MAX_DIMMER;
+    const int correction = targetDimmer - dimmer;
+    gDisplayValues.dimmer = targetDimmer;
 
-    gDisplayValues.dimmer = dimmer;
+    bool commandSent = false;
+    bool commandOk = true;
 
-    // Real dimmer command only when change is significant
     if (abs(gDisplayValues.dimmer - lastSentDimmer) >= DIMMER_MIN_CHANGE) {
-        sendDimmerPower(gDisplayValues.dimmer);
-        lastSentDimmer = gDisplayValues.dimmer;
+        commandSent = true;
+        commandOk = sendDimmerPower(gDisplayValues.dimmer);
+
+        // Retry on the next control cycle if the ESP8266 did not answer.
+        if (commandOk)
+            lastSentDimmer = gDisplayValues.dimmer;
     }
 
     Serial.println();
-    Serial.println("========== FRONIUS ZERO GRID V11 ==========");
+    Serial.println("========== FRONIUS ZERO GRID V12 ==========");
     Serial.printf("PV production : %d W\n", production);
     Serial.printf("Grid exchange : %d W\n", grid);
+    Serial.printf("Grid target   : %d W (band %d..%d W)\n",
+                  FRONIUS_GRID_TARGET_W, gridLow, gridHigh);
     Serial.printf("Heater max    : %d W\n", FRONIUS_HEATER_POWER_W);
-    Serial.printf("Dimmer command: %d %%\n", gDisplayValues.dimmer);
-    Serial.printf("Target dimmer : %d %%\n", targetDimmer);
-    Serial.printf("Heater power  : %d W\n", (FRONIUS_HEATER_POWER_W * dimmer) / 100);
+    Serial.printf("Dimmer current: %d %%\n", dimmer);
+    Serial.printf("Dimmer target : %d %%\n", targetDimmer);
+    Serial.printf("Power target  : %d W\n", targetHeaterPower);
+    Serial.printf("Correction    : %+d %% (%+d W requested)\n",
+                  correction, powerCorrection);
 
-    if (grid < -FRONIUS_GRID_MARGIN_W)
-        Serial.println("Status        : SURPLUS PV");
-    else if (grid > FRONIUS_GRID_MARGIN_W)
-        Serial.println("Status        : IMPORT RESEAU");
+    if (grid < gridLow)
+        Serial.println("Status        : SURPLUS PV -> LOAD UP");
+    else if (grid > gridHigh)
+        Serial.println("Status        : IMPORT RESEAU -> LOAD DOWN");
     else
-        Serial.println("Status        : ZERO GRID OK");
+        Serial.println("Status        : ZERO GRID OK -> HOLD");
 
-    Serial.printf("Correction    : %d %%\n", correction);
-    Serial.println("Decision      : REAL HTTP DIMMER COMMAND");
+    if (commandSent)
+        Serial.printf("Dimmer output : %s\n", commandOk ? "HTTP OK" : "HTTP ERROR - RETRY NEXT CYCLE");
+    else
+        Serial.println("Dimmer output : HOLD - no HTTP needed");
+
     Serial.println("===========================================");
-
-    lastGrid = grid;
 }
 
 #endif
