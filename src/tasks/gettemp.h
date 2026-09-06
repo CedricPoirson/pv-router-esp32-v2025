@@ -15,29 +15,28 @@ extern DisplayValues gDisplayValues;
 extern volatile bool gDisplayForceRefresh;
 #endif
 
-// Fast catch-up while the remote dimmer does not yet match the command,
-// then a lighter steady-state poll once both sides are synchronized.
 #define DIMMER_STATE_POLL_SYNC_MS    5000UL
 #define DIMMER_STATE_POLL_CATCHUP_MS 2000UL
 #define DIMMER_STATE_HTTP_TIMEOUT_MS  1200UL
 
 void GetDImmerTemp(void * parameter){
+  bool linkStateKnown = false;
+  bool previousLinkOk = false;
+
   for (;;){
     unsigned long nextPollMs = DIMMER_STATE_POLL_CATCHUP_MS;
+    bool currentLinkOk = false;
+    String errorReason = "unknown";
 
     String baseurl = "/state";
     httpdimmer.begin(String(config.dimmer), 80, baseurl);
     httpdimmer.setTimeout(DIMMER_STATE_HTTP_TIMEOUT_MS);
     int httpResponseCode = httpdimmer.GET();
 
-    String dimmerstate = "";
-
     if (httpResponseCode == HTTP_CODE_OK) {
-      dimmerstate = httpdimmer.getString();
+      String dimmerstate = httpdimmer.getString();
 
-      // Expected payload example:
-      // 50;36.94;16;5;The_Wifi;-4
-      // POWER;temperature;...
+      // Expected payload: POWER;temperature;...
       int firstSeparator = dimmerstate.indexOf(';');
       int secondSeparator = (firstSeparator >= 0)
                               ? dimmerstate.indexOf(';', firstSeparator + 1)
@@ -58,6 +57,7 @@ void GetDImmerTemp(void * parameter){
 
         gDisplayValues.dimmerCommOk = true;
         gDisplayValues.dimmerLastOkMs = millis();
+        currentLinkOk = true;
 
         int commandedDimmer = gDisplayValues.dimmer;
         if (commandedDimmer < 0) commandedDimmer = 0;
@@ -71,28 +71,32 @@ void GetDImmerTemp(void * parameter){
         nextPollMs = synced ? DIMMER_STATE_POLL_SYNC_MS
                             : DIMMER_STATE_POLL_CATCHUP_MS;
 
-        Serial.printf("[DIMMER STATE] CMD=%d POWER=%d TEMP=%s OK=1 POLL=%lu ms\n",
-                      commandedDimmer,
-                      reportedDimmer,
-                      gDisplayValues.temperature.c_str(),
-                      nextPollMs);
+        if (!linkStateKnown || !previousLinkOk) {
+          Serial.printf("[DIMMER] LINK OK POWER=%d%% TEMP=%s C\n",
+                        reportedDimmer,
+                        gDisplayValues.temperature.c_str());
+        }
       }
       else {
         gDisplayValues.dimmerCommOk = false;
-        Serial.println("[DIMMER STATE] invalid payload - retry 2 s");
+        errorReason = "invalid /state payload";
       }
     }
     else {
-      Serial.printf("[DIMMER STATE] HTTP error=%d - retry 2 s\n",
-                    httpResponseCode);
       gDisplayValues.dimmerCommOk = false;
+      errorReason = "HTTP " + String(httpResponseCode);
     }
 
     httpdimmer.end();
 
+    if (!currentLinkOk && (!linkStateKnown || previousLinkOk)) {
+      Serial.printf("[DIMMER] LINK ERROR (%s)\n", errorReason.c_str());
+    }
+
+    linkStateKnown = true;
+    previousLinkOk = currentLinkOk;
+
 #ifdef TTGO
-    // Make the TTGO repaint immediately after a fresh dimmer read instead of
-    // waiting for the periodic screen refresh.
     gDisplayForceRefresh = true;
 #endif
 
