@@ -2,7 +2,7 @@
 #define FRONIUS_ZERO_GRID_H
 
 // Fronius Zero Grid controller
-// V13.1 - V12.2 regulation with concise event-based serial logging
+// V13.2 - V12.2 regulation + dimmer command/actual resynchronisation
 // Positive P_Grid = import from grid
 // Negative P_Grid = export to grid
 
@@ -22,10 +22,17 @@
 #define DIMMER_HTTP_TIMEOUT_MS 1500
 #define DIMMER_REFRESH_MS 20000UL
 
+// If the dimmer reports a value that stays far from the requested command,
+// force an HTTP resend instead of waiting only for the periodic refresh.
+#define DIMMER_SYNC_TOLERANCE_PERCENT 10
+#define DIMMER_SYNC_MISMATCH_MS 15000UL
+#define DIMMER_STATE_FRESH_MS 15000UL
+
 extern DisplayValues gDisplayValues;
 
 static int lastSentDimmer = -1;
 static unsigned long lastDimmerSendMs = 0;
+static unsigned long dimmerMismatchSinceMs = 0;
 static int lastZeroGridState = -1;
 
 enum ZeroGridState {
@@ -86,6 +93,33 @@ void froniusZeroGridSimulation()
     gDisplayValues.dimmer = targetDimmer;
 
     const unsigned long now = millis();
+
+    int reportedDimmer = gDisplayValues.dimmerReported;
+    if (reportedDimmer < 0) reportedDimmer = 0;
+    if (reportedDimmer > 100) reportedDimmer = 100;
+
+    const bool dimmerStateFresh =
+        gDisplayValues.dimmerCommOk &&
+        gDisplayValues.dimmerLastOkMs > 0 &&
+        ((unsigned long)(now - gDisplayValues.dimmerLastOkMs) <= DIMMER_STATE_FRESH_MS);
+
+    const bool dimmerMismatch =
+        dimmerStateFresh &&
+        (abs(gDisplayValues.dimmer - reportedDimmer) > DIMMER_SYNC_TOLERANCE_PERCENT);
+
+    bool mismatchResyncDue = false;
+    if (dimmerMismatch) {
+        if (dimmerMismatchSinceMs == 0) {
+            dimmerMismatchSinceMs = now;
+        }
+        else if ((unsigned long)(now - dimmerMismatchSinceMs) >= DIMMER_SYNC_MISMATCH_MS) {
+            mismatchResyncDue = true;
+        }
+    }
+    else {
+        dimmerMismatchSinceMs = 0;
+    }
+
     const bool valueChanged =
         (lastSentDimmer < 0) ||
         (abs(gDisplayValues.dimmer - lastSentDimmer) >= DIMMER_MIN_CHANGE);
@@ -93,13 +127,25 @@ void froniusZeroGridSimulation()
         (lastSentDimmer >= 0) &&
         ((unsigned long)(now - lastDimmerSendMs) >= DIMMER_REFRESH_MS);
 
-    if (valueChanged || refreshDue) {
+    if (valueChanged || refreshDue || mismatchResyncDue) {
         const int previousSentDimmer = lastSentDimmer;
+
+        if (mismatchResyncDue) {
+            Serial.printf("[DIMMER SYNC] mismatch CMD=%d ACTUAL=%d -> resend\n",
+                          gDisplayValues.dimmer,
+                          reportedDimmer);
+        }
+
         const bool commandOk = sendDimmerPower(gDisplayValues.dimmer);
 
         if (commandOk) {
             lastSentDimmer = gDisplayValues.dimmer;
             lastDimmerSendMs = now;
+
+            // A persistent mismatch may still be present after the resend.
+            // Restart the 15 s observation window before trying again.
+            if (mismatchResyncDue)
+                dimmerMismatchSinceMs = now;
 
             if (valueChanged) {
                 Serial.printf("[DIMMER] %d%% -> %d%% (GRID=%d W)\n",
