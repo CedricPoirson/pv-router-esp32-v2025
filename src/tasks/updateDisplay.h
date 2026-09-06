@@ -144,14 +144,6 @@ static void drawClockIcon(int x, int y, int color)
   display.drawLine(x + 6, y + 6, x + 10, y + 8, color);
 }
 
-static void drawWasherIcon(int x, int y, int color)
-{
-  display.drawRoundRect(x, y, 13, 13, 2, color);
-  display.drawLine(x + 2, y + 3, x + 10, y + 3, color);
-  display.drawCircle(x + 6, y + 8, 4, color);
-  display.drawCircle(x + 6, y + 8, 2, color);
-}
-
 static void drawErrorIcon(int x, int y, int color)
 {
   display.drawCircle(x + 6, y + 6, 6, color);
@@ -159,22 +151,74 @@ static void drawErrorIcon(int x, int y, int color)
   display.drawLine(x + 9, y + 3, x + 3, y + 9, color);
 }
 
-static void drawAdviceTTGO(const String &text, int color, int iconType)
+static int gaugeXForPowerTTGO(int watts)
 {
-  display.setTextFont(2);
+  const int gaugeX = 2;
+  const int gaugeWidth = 236;
+  const int minPower = -2000;
+  const int maxPower = 6000;
+
+  if (watts < minPower) watts = minPower;
+  if (watts > maxPower) watts = maxPower;
+
+  return gaugeX + ((long)(watts - minPower) * (gaugeWidth - 1)) /
+                    (maxPower - minPower);
+}
+
+static void drawPowerGaugeTTGO(int watts, bool valid)
+{
+  const int x = 2;
+  const int y = 116;
+  const int width = 236;
+  const int height = 9;
+
+  const int xMinus500 = gaugeXForPowerTTGO(-500);
+  const int xZero = gaugeXForPowerTTGO(0);
+  const int xOneKw = gaugeXForPowerTTGO(1000);
+  const int xThreeKw = gaugeXForPowerTTGO(3000);
+  const int xMax = x + width - 1;
+
+  // Fixed colour zones make the signed -2..+6 kW scale readable at a glance.
+  display.fillRect(x, y, xMinus500 - x, height, TFT_RED);
+  display.fillRect(xMinus500, y, xZero - xMinus500, height, TFT_ORANGE);
+  display.fillRect(xZero, y, xOneKw - xZero, height, TFT_YELLOW);
+  display.fillRect(xOneKw, y, xThreeKw - xOneKw, height, TFT_GREEN);
+  display.fillRect(xThreeKw, y, xMax - xThreeKw + 1, height, TFT_CYAN);
+
+  display.drawRect(x, y, width, height, TFT_WHITE);
+
+  // Make zero especially obvious: left = grid import, right = available power.
+  display.drawFastVLine(xZero, y - 2, height + 4, TFT_WHITE);
+
+  if (valid) {
+    const int markerX = gaugeXForPowerTTGO(watts);
+    display.drawFastVLine(markerX, y - 3, height + 6, TFT_WHITE);
+    display.fillTriangle(markerX - 3, y - 3,
+                         markerX + 3, y - 3,
+                         markerX, y - 1,
+                         TFT_WHITE);
+  }
+
+  display.setTextFont(1);
   display.setTextSize(1);
-  const int iconWidth = 17;
-  const int textWidth = display.textWidth(text, 2);
-  int x = (240 - (iconWidth + textWidth)) / 2;
-  if (x < 0) x = 0;
+  display.setTextColor(TFT_WHITE, TFT_BLACK);
 
-  if (iconType == 2) drawWasherIcon(x, 116, color);
-  else if (iconType == 1) drawClockIcon(x, 116, color);
-  else drawErrorIcon(x, 116, color);
+  const int labelY = 127;
+  const int values[5] = {-2000, 0, 2000, 4000, 6000};
+  const char *labels[5] = {"-2", "0", "2", "4", "6"};
 
-  display.setTextColor(color, TFT_BLACK);
-  display.setCursor(x + iconWidth, 115, 2);
-  display.print(text);
+  for (int i = 0; i < 5; i++) {
+    const int tickX = gaugeXForPowerTTGO(values[i]);
+    const int textWidth = display.textWidth(labels[i], 1);
+    int textX = tickX - textWidth / 2;
+    if (textX < 0) textX = 0;
+    if (textX + textWidth > 240) textX = 240 - textWidth;
+    display.setCursor(textX, labelY, 1);
+    display.print(labels[i]);
+  }
+
+  display.setCursor(219, labelY, 1);
+  display.print("kW");
 }
 
 static void drawTTGOZeroGridDashboard()
@@ -223,8 +267,16 @@ static void drawTTGOZeroGridDashboard()
       dimmerFresh &&
       (abs(commandedDimmer - reportedDimmer) <= 2);
 
+  // Positive value = extra load that can be added after releasing current CE
+  // power. During actual grid import the gauge deliberately goes negative so
+  // the family display immediately shows that electricity is being purchased.
   int availablePower = heaterPower - grid;
   if (availablePower < 0) availablePower = 0;
+
+  int gaugePower = 0;
+  if (gDisplayValues.froniusup) {
+    gaugePower = (grid > 0) ? -grid : availablePower;
+  }
 
   display.setTextFont(2);
   display.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -271,23 +323,31 @@ static void drawTTGOZeroGridDashboard()
     display.print("CE OK");
   }
 
-  drawCenteredTTGO("DISPO", 20, 2, TFT_WHITE);
+  const bool importing = gDisplayValues.froniusup && (grid > 0);
+  drawCenteredTTGO(importing ? "IMPORT" : "DISPO",
+                   20,
+                   2,
+                   importing ? TFT_RED : TFT_WHITE);
 
-  int availableColor = TFT_RED;
-  if (availablePower >= 2000) availableColor = TFT_GREEN;
-  else if (availablePower >= 500) availableColor = TFT_YELLOW;
+  int mainColor = TFT_RED;
+  if (!importing) {
+    if (availablePower >= 2000) mainColor = TFT_GREEN;
+    else if (availablePower >= 500) mainColor = TFT_YELLOW;
+  }
 
-  String availableText = gDisplayValues.froniusup
-                           ? formatPowerTTGO(availablePower)
-                           : String("---");
+  String mainText = "---";
+  if (gDisplayValues.froniusup) {
+    mainText = importing ? formatPowerTTGO(grid)
+                         : formatPowerTTGO(availablePower);
+  }
 
   display.setTextFont(2);
   display.setTextSize(2);
-  display.setTextColor(availableColor, TFT_BLACK);
-  int availableX = (240 - display.textWidth(availableText, 2)) / 2;
-  if (availableX < 0) availableX = 0;
-  display.setCursor(availableX, 36, 2);
-  display.print(availableText);
+  display.setTextColor(mainColor, TFT_BLACK);
+  int mainX = (240 - display.textWidth(mainText, 2)) / 2;
+  if (mainX < 0) mainX = 0;
+  display.setCursor(mainX, 36, 2);
+  display.print(mainText);
   display.setTextSize(1);
 
   display.setTextFont(2);
@@ -336,35 +396,7 @@ static void drawTTGOZeroGridDashboard()
     display.print(formatPowerTTGO(housePower));
   }
 
-  String advice;
-  int adviceColor;
-  int adviceIcon = 0;
-
-  if (!gDisplayValues.froniusup) {
-    advice = "FRONIUS ERR";
-    adviceColor = TFT_RED;
-  }
-  else if (!dimmerFresh) {
-    advice = "CE A VERIFIER";
-    adviceColor = TFT_RED;
-  }
-  else if (availablePower >= 2000) {
-    advice = "MACHINE OK";
-    adviceColor = TFT_GREEN;
-    adviceIcon = 2;
-  }
-  else if (availablePower >= 500) {
-    advice = "ATTENDRE MACHINE";
-    adviceColor = TFT_YELLOW;
-    adviceIcon = 1;
-  }
-  else {
-    advice = "ATTENDRE";
-    adviceColor = TFT_RED;
-    adviceIcon = 1;
-  }
-
-  drawAdviceTTGO(advice, adviceColor, adviceIcon);
+  drawPowerGaugeTTGO(gaugePower, gDisplayValues.froniusup);
 }
 
 static void drawTTGODiagnosticPage()
