@@ -244,7 +244,7 @@ static void drawTTGOZeroGridDashboard()
   drawCenteredTTGO("DISPO", 22, 2, TFT_WHITE);
 
   int availableColor = TFT_RED;
-  if (availablePower >= 2200) availableColor = TFT_GREEN;
+  if (availablePower >= 2000) availableColor = TFT_GREEN;
   else if (availablePower >= 500) availableColor = TFT_YELLOW;
 
   String availableText = gDisplayValues.froniusup
@@ -306,7 +306,7 @@ static void drawTTGOZeroGridDashboard()
     advice = "CE A VERIFIER";
     adviceColor = TFT_RED;
   }
-  else if (availablePower >= 2200) {
+  else if (availablePower >= 2000) {
     advice = "MACHINE OK";
     adviceColor = TFT_GREEN;
     adviceIcon = 2;
