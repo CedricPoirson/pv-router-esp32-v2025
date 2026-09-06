@@ -1,46 +1,40 @@
 #ifndef TASK_DIMMER
 #define TASK_DIMMER
 
-    #include <Arduino.h>
-    #include "../config/config.h"
-    #include "../config/enums.h"
-    #include "../functions/dimmerFunction.h"
-    #include "../functions/froniusZeroGrid.h"
-
+#include <Arduino.h>
+#include "../config/config.h"
+#include "../config/enums.h"
+#include "../functions/dimmerFunction.h"
+#include "../functions/froniusZeroGrid.h"
 
 extern DisplayValues gDisplayValues;
 
 /**
- * Task: Modifier le dimmer en fonction de la production
+ * Task: regulate the dimmer from the active electricity measurement source.
  *
- * récupère les informations, conso ou injection et fait varier le dimmer en conséquence
- *
+ * When Fronius is available, V12 is the only controller allowed to change
+ * the dimmer command. The legacy watt-based controller is used only when
+ * Fronius is unavailable, avoiding two regulators fighting each other.
  */
 void updateDimmer(void * parameter){
   for (;;){
-  gDisplayValues.task = true;
-#if WIFI_ACTIVE == true
+    gDisplayValues.task = true;
 
-    // Simulation Fronius Zero Grid uniquement
-    // Aucune commande triac envoyée à ce stade
+#if WIFI_ACTIVE == true
     if (gDisplayValues.froniusup == true) {
       froniusZeroGridSimulation();
     }
-
-    dimmer();
-
-    /*
-    /// si changement à faire
-    if  (gDisplayValues.change != 0 ) {
-        Serial.println(F("changement des valeurs dimmer-MQTT"));
-        // envoie de l'information au dimmer et au serveur MQTT ( mosquito ou autre )
-        dimmer_change();
-    }*/
-
+    else {
+      dimmer();
+    }
 #endif
+
     gDisplayValues.task = false;
-   // Sleep for 5 seconds, avant de refaire une analyse
+
+    // Keep the control loop slower than the Fronius acquisition loop so each
+    // decision normally uses a fresh grid measurement.
     vTaskDelay(5000 / portTICK_PERIOD_MS);
   }
 }
+
 #endif
