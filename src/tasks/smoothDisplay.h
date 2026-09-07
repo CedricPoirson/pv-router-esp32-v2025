@@ -3,6 +3,8 @@
 
 #ifdef TTGO
 
+#include "displayHelp.h"
+
 // Differential renderer for the TTGO ST7789. The standard display task used
 // broad black clears before repainting dynamic areas; those blank intervals
 // were visible as local flicker. This renderer updates only fields whose
@@ -538,7 +540,7 @@ static void drawTTGOSmoothDiagnostic(bool fullRedraw)
       ((unsigned long)(now - gDisplayValues.dimmerLastOkMs) <= 15000UL);
 
   if (fullRedraw || !gSmoothDiagnosticCache.valid) {
-    drawCenteredTTGO("DIAGNOSTIC V13", 1, 2, TFT_CYAN);
+    drawCenteredTTGO("DIAGNOSTIC 2/3", 1, 2, TFT_CYAN);
     display.drawFastHLine(0, 18, 240, TFT_DARKGREY);
     drawSmoothDiagnosticLabel("WiFi", 22);
     drawSmoothDiagnosticLabel("IP", 38);
@@ -654,20 +656,28 @@ void updateDisplaySmooth(void * parameter)
     const unsigned long now = millis();
     if (gDisplayForceRefresh ||
         (unsigned long)(now - lastDrawMs) >= 2000UL) {
-      const bool forceRefresh = gDisplayForceRefresh;
+      // A force refresh now means "render immediately", not "clear the TFT".
+      // Only a real page transition clears the whole panel. This avoids the
+      // periodic flash previously triggered by RobotDyn telemetry updates.
       gDisplayForceRefresh = false;
       const uint8_t page = gDisplayPage;
-      const bool fullRedraw = forceRefresh || (page != lastPage);
+      const bool pageChanged = (page != lastPage);
+      const bool fullRedraw = pageChanged;
 
-      if (fullRedraw) {
+      if (pageChanged) {
         display.fillScreen(TFT_BLACK);
         lastPage = page;
       }
 
-      if (page == 0)
+      if (page == 0) {
         drawTTGOSmoothDashboard(fullRedraw);
-      else
+      }
+      else if (page == 1) {
         drawTTGOSmoothDiagnostic(fullRedraw);
+      }
+      else if (page == 2 && fullRedraw) {
+        drawTTGOHelpPage();
+      }
 
       lastDrawMs = now;
     }
