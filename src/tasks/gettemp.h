@@ -36,6 +36,7 @@ void GetDImmerTemp(void * parameter){
   // is kept only as a conservative fallback while /config is unavailable.
   gDisplayValues.dimmerTriggerPercent = -1;
   gDisplayValues.dimmerReleaseTemp = 0.0f;
+  gDisplayValues.dimmerTempLimitActive = false;
 
   // Local ECS temperature latch. Once the maximum is reached, routing remains
   // stopped until the water has cooled to the same release threshold used by
@@ -219,6 +220,8 @@ void GetDImmerTemp(void * parameter){
             // honour the RobotDyn temperature alarm.
             ecsTempLimitActive = true;
           }
+
+          gDisplayValues.dimmerTempLimitActive = ecsTempLimitActive;
 
           if (!previousTempLimit && ecsTempLimitActive) {
             Serial.printf("[DIMMER] ECS MAX TEMP REACHED %.1f/%d C -> POWER=0\n",
