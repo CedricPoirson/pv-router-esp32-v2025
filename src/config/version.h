@@ -4,8 +4,8 @@
 // Project / firmware version. This is intentionally separate from the
 // Zero Grid controller revision so UI/documentation changes do not pretend to
 // modify the regulation algorithm itself.
-#define PV_ROUTER_FIRMWARE_VERSION "14.4"
-#define PV_ROUTER_FIRMWARE_LABEL "V14.4"
+#define PV_ROUTER_FIRMWARE_VERSION "14.5"
+#define PV_ROUTER_FIRMWARE_LABEL "V14.5"
 
 // Regulation algorithm revision implemented in froniusZeroGrid.h.
 #define PV_ROUTER_ZERO_GRID_VERSION "14.3"
