@@ -29,43 +29,37 @@ void loadConfiguration(const char *filename, Config &config) {
   File configFile = SPIFFS.open(filename_conf, "r");
 
   // Allocate a temporary JsonDocument
-  // Don't forget to change the capacity to match your requirements.
-  // Use arduinojson.org/v6/assistant to compute the capacity.
-  StaticJsonDocument<1024> doc;
+  StaticJsonDocument<1280> doc;
 
   // Deserialize the JSON document
   DeserializationError error = deserializeJson(doc, configFile);
   if (error) {
     Serial.println(F("Failed to read file, using default configuration in function loadConfiguration"));
-
-
   }
 
-  
   // Copy values from the JsonDocument to the Config
   config.port = doc["port"] | 8080;
-  strlcpy(config.hostname,                  // <- destination
-          doc["hostname"] | "192.168.1.20", // <- source
-          sizeof(config.hostname));         // <- destination's capacity
-  
-  strlcpy(config.apiKey,                  // <- destination
-          doc["apiKey"] | "Myapikeystring", // <- source
-          sizeof(config.apiKey));         // <- destination's capacity
-      
-  config.UseDomoticz = doc["UseDomoticz"] | false; 
-  config.UseJeedom = doc["UseJeedom"] | false; 
-  config.IDX = doc["IDX"] | 100; 
-  config.IDXdimmer = doc["IDXdimmer"] | 110; 
-  
-  strlcpy(config.otapassword,                  // <- destination
-          doc["otapassword"] | "Pvrouteur2", // <- source
-          sizeof(config.otapassword));         // <- destination's capacity
-  
-  config.facteur = doc["facteur"] | 0.86; 
-  config.delta = doc["delta"] | 50; 
+  strlcpy(config.hostname,
+          doc["hostname"] | "192.168.1.20",
+          sizeof(config.hostname));
+  strlcpy(config.apiKey,
+          doc["apiKey"] | "Myapikeystring",
+          sizeof(config.apiKey));
+
+  config.UseDomoticz = doc["UseDomoticz"] | false;
+  config.UseJeedom = doc["UseJeedom"] | false;
+  config.IDX = doc["IDX"] | 100;
+  config.IDXdimmer = doc["IDXdimmer"] | 110;
+
+  strlcpy(config.otapassword,
+          doc["otapassword"] | "Pvrouteur2",
+          sizeof(config.otapassword));
+
+  config.facteur = doc["facteur"] | 0.86;
+  config.delta = doc["delta"] | 50;
   config.num_fuse = doc["fuse"] | 70;
-  config.deltaneg = doc["deltaneg"] | -100; 
-  config.cosphi = doc["cosphi"] | 23; 
+  config.deltaneg = doc["deltaneg"] | -100;
+  config.cosphi = doc["cosphi"] | 23;
   config.readtime = doc["readtime"] | 555;
   config.cycle = doc["cycle"] | 25;
   config.tmax = doc["tmax"] | 65;
@@ -75,19 +69,27 @@ void loadConfiguration(const char *filename, Config &config) {
   config.mqtt = doc["mqtt"] | true;
   config.dimmerlocal = doc["dimmerlocal"] | false;
   config.polarity = doc["polarity"] | false;
-  strlcpy(config.dimmer,                  // <- destination
-          doc["dimmer"] | "192.168.1.20", // <- source
-          sizeof(config.dimmer));         // <- destination's capacity
 
-   strlcpy(config.mqttserver,                  // <- destination
-          doc["mqttserver"] | "192.168.1.20", // <- source
-          sizeof(config.mqttserver));         // <- destination's capacity
-   strlcpy(config.Publish,                  // <- destination
-          doc["Publish"] | "domoticz/in", // <- source
-          sizeof(config.Publish));         // <- destination's mqtt
-  config.ScreenTime = doc["screentime"] | 0 ; // timer to switch of screen
+  strlcpy(config.dimmer,
+          doc["dimmer"] | "192.168.1.20",
+          sizeof(config.dimmer));
+  strlcpy(config.mqttserver,
+          doc["mqttserver"] | "192.168.1.20",
+          sizeof(config.mqttserver));
+  strlcpy(config.Publish,
+          doc["Publish"] | "domoticz/in",
+          sizeof(config.Publish));
+
+  config.ScreenTime = doc["screentime"] | 0;
+
+  // V14.3 runtime tuning. Existing config.json files do not contain these
+  // keys, so they transparently keep the proven controller defaults.
+  config.heaterPowerW = doc["heater_power_w"] | 800;
+  config.gridTargetW = doc["grid_target_w"] | -15;
+  config.gridDeadbandW = doc["grid_deadband_w"] | 10;
+  config.dimmerMaxPercent = doc["dimmer_max_percent"] | 100;
+
   configFile.close();
-      
 }
 
 //***********************************
@@ -95,21 +97,14 @@ void loadConfiguration(const char *filename, Config &config) {
 //***********************************
 
 void saveConfiguration(const char *filename, const Config &config) {
-  
-  // Open file for writing
-   File configFile = SPIFFS.open(filename_conf, "w");
+  File configFile = SPIFFS.open(filename_conf, "w");
   if (!configFile) {
     Serial.println(F("Failed to open config file for writing in function Save configuration"));
-    
     return;
-  } 
+  }
 
-  // Allocate a temporary JsonDocument
-  // Don't forget to change the capacity to match your requirements.
-  // Use arduinojson.org/assistant to compute the capacity.
-  StaticJsonDocument<1024> doc;
+  StaticJsonDocument<1280> doc;
 
-  // Set the values in the document
   doc["hostname"] = config.hostname;
   doc["port"] = config.port;
   doc["apiKey"] = config.apiKey;
@@ -130,19 +125,22 @@ void saveConfiguration(const char *filename, const Config &config) {
   doc["facteur"] = config.facteur;
   doc["fuse"] = config.num_fuse;
   doc["mqtt"] = config.mqtt;
-  doc["mqttserver"] = config.mqttserver;  
+  doc["mqttserver"] = config.mqttserver;
   doc["tmax"] = config.tmax;
   doc["resistance"] = config.resistance;
-  doc["polarity"] = config.polarity; 
+  doc["polarity"] = config.polarity;
   doc["Publish"] = config.Publish;
-  doc["screentime"] = config.ScreenTime; 
-  // Serialize JSON to file
+  doc["screentime"] = config.ScreenTime;
+
+  doc["heater_power_w"] = config.heaterPowerW;
+  doc["grid_target_w"] = config.gridTargetW;
+  doc["grid_deadband_w"] = config.gridDeadbandW;
+  doc["dimmer_max_percent"] = config.dimmerMaxPercent;
+
   if (serializeJson(doc, configFile) == 0) {
     Serial.println(F("Failed to write to file in function Save configuration "));
-    
   }
 
-  // Close the file
   configFile.close();
 }
 
@@ -152,36 +150,22 @@ const char *wifi_conf = "/wifi.json";
 extern Configwifi configwifi; 
 
 void loadwifi(const char *filename, Configwifi &configwifi) {
-  // Open file for reading
   File configFile = SPIFFS.open(wifi_conf, "r");
 
-  // Allocate a temporary JsonDocument
-  // Don't forget to change the capacity to match your requirements.
-  // Use arduinojson.org/v6/assistant to compute the capacity.
   StaticJsonDocument<512> doc;
 
-  // Deserialize the JSON document
   DeserializationError error = deserializeJson(doc, configFile);
   if (error) {
     Serial.println(F("Failed to read wifi config, using default configuration in function config.h"));
   }
 
-  
-  // Copy values from the JsonDocument to the Config
-  
-  strlcpy(configwifi.SID,                  // <- destination
-          doc["SID"] | "xxx", // <- source
-          sizeof(configwifi.SID));         // <- destination's capacity
-  
-  strlcpy(configwifi.passwd,                  // <- destination
-          doc["passwd"] | "xxx", // <- source
-          sizeof(configwifi.passwd));         // <- destination's capacity
+  strlcpy(configwifi.SID,
+          doc["SID"] | "xxx",
+          sizeof(configwifi.SID));
+  strlcpy(configwifi.passwd,
+          doc["passwd"] | "xxx",
+          sizeof(configwifi.passwd));
   configFile.close();
-      
 }
-
-
-
-
 
 #endif
