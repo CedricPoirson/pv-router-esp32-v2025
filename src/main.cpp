@@ -14,6 +14,7 @@
 #include <ArduinoJson.h> // ArduinoJson : https://github.com/bblanchon/ArduinoJson
 
 #include "tasks/updateDisplay.h"
+#include "tasks/bootScreen.h"
 #include "tasks/switchDisplay.h"
 #include "tasks/fetch-time-from-ntp.h"
 //#include "tasks/mqtt-aws.h"
@@ -88,13 +89,13 @@ void setup()
       pinMode(SWITCH, INPUT);
       display.init();
       display.setRotation(1);
-      drawTTGOBootScreen("DEMARRAGE", "Initialisation materiel", 15);
+      drawTTGOGraphicalBootScreen("DEMARRAGE", "Initialisation materiel", 15);
     #endif
   #endif
 
   #if WIFI_ACTIVE == true
     #ifdef TTGO
-      drawTTGOBootScreen("CONNEXION WI-FI", "Connexion au reseau local", 35);
+      drawTTGOGraphicalBootScreen("CONNEXION WI-FI", "Connexion au reseau local", 35);
     #endif
 
     if (strcmp(WIFI_PASSWORD, "xxx") == 0) {
@@ -116,7 +117,7 @@ void setup()
     btStop();
 
     #ifdef TTGO
-      drawTTGOBootScreen("WI-FI OK", gDisplayValues.IP, 60);
+      drawTTGOGraphicalBootScreen("WI-FI OK", gDisplayValues.IP, 60);
     #endif
   #endif
 
@@ -137,14 +138,14 @@ void setup()
   //************* Setup - récupération du fichier de configuration
   //***********************************
   #ifdef TTGO
-    drawTTGOBootScreen("CONFIGURATION", "Lecture config.json", 75);
+    drawTTGOGraphicalBootScreen("CONFIGURATION", "Lecture config.json", 75);
   #endif
 
   Serial.println(F("Loading configuration..."));
   loadConfiguration(filename_conf, config);
 
   #ifdef TTGO
-    drawTTGOBootScreen("CONFIGURATION OK", "Demarrage des services", 82);
+    drawTTGOGraphicalBootScreen("CONFIGURATION OK", "Demarrage des services", 82);
   #endif
 
   // Initialize Dimmer State
@@ -158,7 +159,7 @@ void setup()
       Serial.println("start Web server");
       call_pages();
       #ifdef TTGO
-        drawTTGOBootScreen("SERVEUR WEB OK", gDisplayValues.IP, 90);
+        drawTTGOGraphicalBootScreen("SERVEUR WEB OK", gDisplayValues.IP, 90);
       #endif
     #endif
 
@@ -294,7 +295,7 @@ void setup()
   #endif
 
   #ifdef TTGO
-    drawTTGOBootScreen("PRET", "Fronius - RobotDyn - MQTT", 100);
+    drawTTGOGraphicalBootScreen("PRET", "Fronius - RobotDyn - MQTT", 100);
     delay(550);
     gDisplayBootComplete = true;
     gDisplayForceRefresh = true;
