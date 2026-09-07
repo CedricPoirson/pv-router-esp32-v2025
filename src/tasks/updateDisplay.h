@@ -294,11 +294,11 @@ static void drawTTGOZeroGridDashboard()
       (effectiveMaxTemp > 0) &&
       (waterTemp >= (float)effectiveMaxTemp);
 
+  // Display TEMP MAX as soon as the measured water reaches the active ECS
+  // setpoint. Do not require a non-zero command: at the limit the safety task
+  // may already have forced the dimmer command itself back to 0%.
   const bool heaterAtTempLimit =
-      dimmerFresh &&
-      tempAtOrAboveMax &&
-      (commandedDimmer > 0) &&
-      (reportedDimmer == 0);
+      dimmerFresh && tempAtOrAboveMax;
 
   const bool dimmerSynced =
       dimmerFresh &&
@@ -347,7 +347,7 @@ static void drawTTGOZeroGridDashboard()
       waterTemp > 0.0f ? String(waterTemp, 1) : "--.-";
   String tempMaxText = "/";
   tempMaxText += effectiveMaxTemp > 0 ? String(effectiveMaxTemp) : "--";
-  tempMaxText += "C";
+  tempMaxText += "°C";
 
   display.setTextColor(tempColor, TFT_BLACK);
   display.setCursor(73, 2, 2);
@@ -581,10 +581,10 @@ static void drawTTGODiagnosticPage()
           ? gDisplayValues.dimmerMaxTemp
           : config.tmax;
   String temperatureText =
-      waterTemp > 0.0f ? String(waterTemp, 1) + "C" : "--.-C";
+      waterTemp > 0.0f ? String(waterTemp, 1) + "°C" : "--.-°C";
   temperatureText += " / ";
   temperatureText +=
-      effectiveMaxTemp > 0 ? String(effectiveMaxTemp) + "C" : "--C";
+      effectiveMaxTemp > 0 ? String(effectiveMaxTemp) + "°C" : "--°C";
   const int tempColor =
       waterTemperatureColorTTGO(waterTemp, effectiveMaxTemp);
   drawDiagnosticRowTTGO("Eau/Tmax", temperatureText, 102, tempColor);
