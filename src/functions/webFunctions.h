@@ -29,10 +29,15 @@ static String buildApiStatus()
       gDisplayValues.dimmerLastOkMs > 0 &&
       ((unsigned long)(now - gDisplayValues.dimmerLastOkMs) <= 15000UL);
 
-  int dimmerCmd = constrain(gDisplayValues.dimmer, 0, 100);
+  const int maxDimmer = froniusConfiguredMaxDimmer();
+  const int heaterModelW = froniusConfiguredHeaterPowerW();
+  const int gridTargetW = froniusConfiguredGridTargetW();
+  const int gridDeadbandW = froniusConfiguredGridDeadbandW();
+
+  int dimmerCmd = constrain(gDisplayValues.dimmer, 0, maxDimmer);
   int dimmerActual = dimmerOnline ? constrain(gDisplayValues.dimmerReported, 0, 100) : 0;
 
-  const int heaterPower = (FRONIUS_HEATER_POWER_W * dimmerActual) / 100;
+  const int heaterPower = (heaterModelW * dimmerActual) / 100;
   const int gridPower = (int)gDisplayValues.grid;
   const int pvPower = (int)gDisplayValues.production;
 
@@ -65,7 +70,7 @@ static String buildApiStatus()
     status = "DIMMER ALARM";
   else if (!dimmerSynced)
     status = "CE SYNC";
-  else if (dimmerActual >= 100 && gridPower < -20)
+  else if (dimmerActual >= maxDimmer && gridPower < -20)
     status = "LOAD LIMITED";
   else if (gridPower > 20)
     status = "IMPORT";
@@ -98,11 +103,14 @@ static String buildApiStatus()
 
   JsonObject regulation = doc.createNestedObject("regulation");
   regulation["version"] = "V14.3";
-  regulation["target_w"] = FRONIUS_GRID_TARGET_W;
-  regulation["low_w"] = FRONIUS_GRID_TARGET_W - FRONIUS_GRID_DEADBAND_W;
-  regulation["high_w"] = FRONIUS_GRID_TARGET_W + FRONIUS_GRID_DEADBAND_W;
-  regulation["correction_w"] = FRONIUS_GRID_TARGET_W - gridPower;
-  regulation["heater_model_w"] = FRONIUS_HEATER_POWER_W;
+  regulation["target_w"] = gridTargetW;
+  regulation["low_w"] = gridTargetW - gridDeadbandW;
+  regulation["high_w"] = gridTargetW + gridDeadbandW;
+  regulation["deadband_w"] = gridDeadbandW;
+  regulation["correction_w"] = gridTargetW - gridPower;
+  regulation["heater_model_w"] = heaterModelW;
+  regulation["max_dimmer_percent"] = maxDimmer;
+  regulation["max_heater_w"] = (heaterModelW * maxDimmer) / 100;
   regulation["state"] = status;
 
   JsonObject dimmer = doc.createNestedObject("dimmer");
@@ -138,12 +146,16 @@ static String buildApiStatus()
 
 static String buildApiConfig(bool saved = false)
 {
-  StaticJsonDocument<768> doc;
+  StaticJsonDocument<1024> doc;
   doc["saved"] = saved;
   doc["dimmer_ip"] = config.dimmer;
   doc["screen_timeout_s"] = config.ScreenTime;
   doc["fallback_tmax_c"] = config.tmax;
-  doc["heater_power_w"] = FRONIUS_HEATER_POWER_W;
+  doc["heater_power_w"] = froniusConfiguredHeaterPowerW();
+  doc["grid_target_w"] = froniusConfiguredGridTargetW();
+  doc["grid_deadband_w"] = froniusConfiguredGridDeadbandW();
+  doc["dimmer_max_percent"] = froniusConfiguredMaxDimmer();
+  doc["max_heater_w"] = froniusConfiguredMaxHeaterPowerW();
   doc["autonomous"] = config.autonome;
   doc["mqtt_runtime_editable"] = false;
 
@@ -238,6 +250,46 @@ void call_pages()
       changed = true;
     }
 
+    if (request->hasParam("heater_power_w", true)) {
+      const int value = request->getParam("heater_power_w", true)->value().toInt();
+      if (value < 100 || value > 5000) {
+        sendJsonError(request, 400, "Puissance resistance hors plage 100..5000 W");
+        return;
+      }
+      config.heaterPowerW = value;
+      changed = true;
+    }
+
+    if (request->hasParam("grid_target_w", true)) {
+      const int value = request->getParam("grid_target_w", true)->value().toInt();
+      if (value < -200 || value > 0) {
+        sendJsonError(request, 400, "Cible reseau hors plage -200..0 W");
+        return;
+      }
+      config.gridTargetW = value;
+      changed = true;
+    }
+
+    if (request->hasParam("grid_deadband_w", true)) {
+      const int value = request->getParam("grid_deadband_w", true)->value().toInt();
+      if (value < 2 || value > 100) {
+        sendJsonError(request, 400, "Bande morte hors plage 2..100 W");
+        return;
+      }
+      config.gridDeadbandW = value;
+      changed = true;
+    }
+
+    if (request->hasParam("dimmer_max_percent", true)) {
+      const int value = request->getParam("dimmer_max_percent", true)->value().toInt();
+      if (value < 10 || value > 100) {
+        sendJsonError(request, 400, "Limite dimmer hors plage 10..100 %");
+        return;
+      }
+      config.dimmerMaxPercent = value;
+      changed = true;
+    }
+
     if (changed) {
       Serial.println(F("[WEB] Saving V2 configuration..."));
       saveConfiguration(filename_conf, config);
@@ -277,8 +329,6 @@ void call_pages()
       return;
     }
 
-    // Require the two keys that identify a current PV Router config and avoid
-    // silently replacing it with an unrelated but syntactically valid JSON.
     if (!imported.containsKey("dimmer") || !imported.containsKey("screentime")) {
       sendJsonError(request, 400, "Ce fichier ne ressemble pas a une configuration PV Router");
       return;
