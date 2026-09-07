@@ -227,7 +227,8 @@ String injection_type() {
 }
 
 /*
-*  récupération de la température sur le dimmer 
+*  Legacy helper: retrieve the dimmer HTTP body after response headers.
+*  The active V13 path uses GetDImmerTemp() and ArduinoJson instead.
 */
 String Dimmer_temp(char* host) {
 WiFiClient client;
@@ -245,7 +246,10 @@ WiFiClient client;
       break;
     }
   }
-  String line = client.readStringUntil('OK');
+
+  // readStringUntil() accepts a single character only; the former 'OK'
+  // multi-character literal compiled as 'K' and generated a warning.
+  String line = client.readString();
 
   return (line);
    
