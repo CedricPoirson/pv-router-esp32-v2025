@@ -44,6 +44,7 @@ struct DisplayValues {
   float dimmerPower;
   float dimmerPtotal;
   int dimmerRssi;
+  int dimmerMaxTemp;
   String dimmerAlert;
   String dimmerVersion;
 };
