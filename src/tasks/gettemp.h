@@ -40,7 +40,9 @@ void GetDImmerTemp(void * parameter){
 
   // Local ECS temperature latch. Once the maximum is reached, routing remains
   // stopped until the water has cooled to the same release threshold used by
-  // RobotDyn: maxtemp - (maxtemp * trigger / 100).
+  // RobotDyn. The RobotDyn firmware stores both maxtemp and trigger as ints and
+  // therefore evaluates: maxtemp - ((maxtemp * trigger) / 100) with integer
+  // truncation. We deliberately mirror that exact behaviour here.
   bool ecsTempLimitActive = false;
   bool previousIgnoredRemoteTempAlarm = false;
   bool previousOtherRemoteAlarm = false;
@@ -103,10 +105,11 @@ void GetDImmerTemp(void * parameter){
                   (float)gDisplayValues.dimmerMaxTemp -
                   DIMMER_ECS_FALLBACK_HYSTERESIS_C;
               if (triggerKnown) {
+                const int releaseDeltaC =
+                    (gDisplayValues.dimmerMaxTemp *
+                     gDisplayValues.dimmerTriggerPercent) / 100;
                 releaseTemp =
-                    (float)gDisplayValues.dimmerMaxTemp -
-                    ((float)gDisplayValues.dimmerMaxTemp *
-                     (float)gDisplayValues.dimmerTriggerPercent / 100.0f);
+                    (float)(gDisplayValues.dimmerMaxTemp - releaseDeltaC);
               }
               if (releaseTemp < 0.0f) releaseTemp = 0.0f;
               gDisplayValues.dimmerReleaseTemp = releaseTemp;
@@ -114,7 +117,7 @@ void GetDImmerTemp(void * parameter){
 
               if (firstValidConfig || maxChanged || triggerChanged) {
                 if (triggerKnown) {
-                  Serial.printf("[DIMMER] CONFIG OK MAX=%d C TRIGGER=%d%% RELEASE=%.2f C\n",
+                  Serial.printf("[DIMMER] CONFIG OK MAX=%d C TRIGGER=%d%% RELEASE=%.1f C\n",
                                 gDisplayValues.dimmerMaxTemp,
                                 gDisplayValues.dimmerTriggerPercent,
                                 gDisplayValues.dimmerReleaseTemp);
@@ -190,10 +193,9 @@ void GetDImmerTemp(void * parameter){
           float releaseTemp =
               (float)effectiveMaxTemp - DIMMER_ECS_FALLBACK_HYSTERESIS_C;
           if (gDisplayValues.dimmerTriggerPercent >= 0) {
-            releaseTemp =
-                (float)effectiveMaxTemp -
-                ((float)effectiveMaxTemp *
-                 (float)gDisplayValues.dimmerTriggerPercent / 100.0f);
+            const int releaseDeltaC =
+                (effectiveMaxTemp * gDisplayValues.dimmerTriggerPercent) / 100;
+            releaseTemp = (float)(effectiveMaxTemp - releaseDeltaC);
           }
           if (releaseTemp < 0.0f) releaseTemp = 0.0f;
           gDisplayValues.dimmerReleaseTemp = releaseTemp;
@@ -229,7 +231,7 @@ void GetDImmerTemp(void * parameter){
                           effectiveMaxTemp);
           }
           else if (previousTempLimit && !ecsTempLimitActive) {
-            Serial.printf("[DIMMER] ECS TEMP RELEASED %.1f C (MAX=%d C, restart<=%.2f C, trigger=%d%%)\n",
+            Serial.printf("[DIMMER] ECS TEMP RELEASED %.1f C (MAX=%d C, restart<=%.1f C, trigger=%d%%)\n",
                           waterTemp,
                           effectiveMaxTemp,
                           releaseTemp,
@@ -243,7 +245,7 @@ void GetDImmerTemp(void * parameter){
 
           if (ignoredRemoteTemperatureAlarm &&
               !previousIgnoredRemoteTempAlarm) {
-            Serial.printf("[DIMMER] STALE TEMP ALARM IGNORED %.1f C < restart %.2f C (MAX=%d C)\n",
+            Serial.printf("[DIMMER] STALE TEMP ALARM IGNORED %.1f C < restart %.1f C (MAX=%d C)\n",
                           waterTemp,
                           releaseTemp,
                           effectiveMaxTemp);
@@ -281,7 +283,7 @@ void GetDImmerTemp(void * parameter){
 
           if (!linkStateKnown || !previousLinkOk) {
             if (gDisplayValues.dimmerTriggerPercent >= 0) {
-              Serial.printf("[DIMMER] LINK OK ACTUAL=%d%% CMD=%d%% TEMP=%s C MAX=%d C TRIGGER=%d%% RELEASE=%.2f C RSSI=%d\n",
+              Serial.printf("[DIMMER] LINK OK ACTUAL=%d%% CMD=%d%% TEMP=%s C MAX=%d C TRIGGER=%d%% RELEASE=%.1f C RSSI=%d\n",
                             gDisplayValues.dimmerReported,
                             gDisplayValues.dimmerCommandReported,
                             gDisplayValues.temperature.length() > 0
