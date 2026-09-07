@@ -15,8 +15,11 @@
 /**
  * WiFi credentials
  *
- * If WIFI_PASSWORD is left as "xxx", the firmware falls back to /wifi.json
- * stored in SPIFFS.
+ * V14.6 can also configure Wi-Fi without recompiling:
+ * hold the TTGO button for ~3 seconds while powering/rebooting the router,
+ * connect to SSID "PVRouter-Setup" with password "pvrouter14", then open
+ * http://192.168.4.1. Credentials saved in /wifi.json take priority over the
+ * compile-time fallback below.
  */
 #define WIFI_NETWORK "YOUR_WIFI_SSID"
 #define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
@@ -44,7 +47,10 @@
 #define HA_DISCOVERY_PREFIX "homeassistant"
 
 /**
- * Display
+ * Display / physical setup button
+ *
+ * GPIO35 is the existing TTGO user button used for display navigation and,
+ * when held during boot, for the Wi-Fi setup portal.
  */
 #define SWITCH 35
 //#define SWITCHTIMER 0   // 0 : always ON / other : time in sec
