@@ -2,7 +2,7 @@
 #define FRONIUS_ZERO_GRID_H
 
 // Fronius Zero Grid controller
-// V14.2 - dynamic surplus ramp + asymmetric anti-import control
+// V14.3 - predictive physics control for fast cloud/load tracking
 // Positive P_Grid = import from grid
 // Negative P_Grid = export to grid
 
@@ -20,28 +20,18 @@
 #define FRONIUS_GRID_TARGET_W -15
 #define FRONIUS_GRID_DEADBAND_W 10
 
-// Asymmetric control tuning.
-// Grid import has priority over surplus capture. Small imports are corrected
-// without large oscillations; a real appliance load causes an immediate
-// physics-based heater reduction, with a small export reserve to compensate
-// for Fronius/RobotDyn feedback latency.
+// Grid import has priority. A real appliance load is removed from the routed
+// heater power immediately from the current Fronius sample, with a small
+// additional export reserve to cover Fronius/RobotDyn feedback latency.
 #define DIMMER_IMPORT_FAST_W 80
 #define DIMMER_IMPORT_EMERGENCY_W 250
-#define DIMMER_IMPORT_FINE_STEP_PERCENT 8
 #define DIMMER_IMPORT_RESERVE_W 25
 #define DIMMER_IMPORT_EMERGENCY_RESERVE_W 50
 
-// Dynamic surplus capture. Large export should be absorbed quickly, while the
-// final approach to Zero Grid remains deliberately slow to avoid overshoot.
-// A lead limit prevents HTTP commands from running too far ahead of the power
-// actually reported by RobotDyn when its /state feedback is a little slower.
-#define DIMMER_SURPLUS_TURBO_W 300
-#define DIMMER_SURPLUS_MEDIUM_W 100
-#define DIMMER_SURPLUS_TURBO_STEP_PERCENT 20
-#define DIMMER_SURPLUS_MEDIUM_STEP_PERCENT 8
-#define DIMMER_SURPLUS_FINE_STEP_PERCENT 3
-#define DIMMER_SURPLUS_MAX_LEAD_PERCENT 30
-
+// V14.3 no longer uses arbitrary +3/+8/+20% ramps. The requested heater power
+// is calculated directly from P_Grid and the measured 800 W load. On surplus,
+// a second command-relative bound makes sure a new command cannot consume more
+// than the export that is actually visible in the current Fronius sample.
 #define DIMMER_MIN_CHANGE 1
 #define DIMMER_HTTP_TIMEOUT_MS 500UL
 #define DIMMER_REFRESH_MS 60000UL
@@ -163,23 +153,26 @@ void froniusZeroGridSimulation()
         gDisplayValues.dimmerLastOkMs > 0 &&
         ((unsigned long)(now - gDisplayValues.dimmerLastOkMs) <= DIMMER_STATE_FRESH_MS);
 
-    // P_Grid already includes the heater consumption. Use the power that is
-    // physically applied by the 800 W resistance to calculate the absolute
-    // heater power that would place the grid at our small export target.
+    // P_Grid already includes the heater consumption. Use the power actually
+    // reported by RobotDyn when fresh; otherwise fall back to our command.
     const int controlDimmer = dimmerStateFresh ? reportedDimmer : commandedDimmer;
     const int currentHeaterPower = dimmerPercentToHeaterWatts(controlDimmer);
 
-    // The last command is important while RobotDyn is still moving toward it.
-    // It prevents an import sample from raising the command again simply
-    // because ACTUAL is still above/below a previous request.
+    // lastSentDimmer represents power already requested from RobotDyn even if
+    // /state has not caught up yet. It is used by the predictive safety bound.
     const int requestedDimmer =
         lastSentDimmer >= 0
             ? constrain(lastSentDimmer, 0, FRONIUS_MAX_DIMMER)
             : commandedDimmer;
+    const int requestedHeaterPower = dimmerPercentToHeaterWatts(requestedDimmer);
 
     const int gridLow = FRONIUS_GRID_TARGET_W - FRONIUS_GRID_DEADBAND_W;
     const int gridHigh = FRONIUS_GRID_TARGET_W + FRONIUS_GRID_DEADBAND_W;
 
+    // Physics target: if heater power changes by X watts, P_Grid changes by
+    // approximately +X watts. Therefore the heater power required to move the
+    // grid directly to FRONIUS_GRID_TARGET_W is:
+    //   Pheater_target = Pheater_now + (Pgrid_target - Pgrid_now)
     int rawTargetHeaterPower =
         currentHeaterPower + (FRONIUS_GRID_TARGET_W - grid);
     rawTargetHeaterPower = constrain(rawTargetHeaterPower,
@@ -192,15 +185,11 @@ void froniusZeroGridSimulation()
     int targetDimmer = requestedDimmer;
 
     if (grid > gridHigh) {
-        // GRID IMPORT: reducing the dimmer reduces grid consumption.
-        // Never increase the requested heater power while the house imports.
-        targetDimmer = min(rawTargetDimmer, requestedDimmer);
+        // GRID IMPORT: immediately shed the amount of heater power required by
+        // the measured import. There is deliberately no downward ramp limit.
+        targetDimmer = rawTargetDimmer;
 
         if (grid >= DIMMER_IMPORT_FAST_W) {
-            // Fast appliance-load path. Remove the measured import in one
-            // Fronius sample and deliberately leave a small export reserve.
-            // If the new appliance consumes more than the heater can shed,
-            // this naturally commands POWER=0 immediately.
             const int reserveW =
                 grid >= DIMMER_IMPORT_EMERGENCY_W
                     ? DIMMER_IMPORT_EMERGENCY_RESERVE_W
@@ -216,45 +205,29 @@ void froniusZeroGridSimulation()
                 heaterWattsToDimmerPercent(fastTargetHeaterPower);
             targetDimmer = min(targetDimmer, fastTargetDimmer);
         }
-        else {
-            // Close to zero, limit the correction to avoid a needless swing
-            // deep into export while still prioritising removal of grid draw.
-            const int minAllowed =
-                max(0, requestedDimmer - DIMMER_IMPORT_FINE_STEP_PERCENT);
-            if (targetDimmer < minAllowed)
-                targetDimmer = minAllowed;
-        }
     }
     else if (grid < gridLow) {
-        // PV SURPLUS: increasing the dimmer increases consumption by about
-        // 8 W per percentage point with the measured 800 W resistance.
-        // Large surplus gets a fast ramp; close to Zero Grid we keep small
-        // steps. rawTargetDimmer remains the physics-based upper objective.
-        targetDimmer = max(rawTargetDimmer, requestedDimmer);
+        // PV SURPLUS: go directly to the calculated physics target. This makes
+        // the router follow fast cloud edges instead of waiting through fixed
+        // percentage ramps.
+        targetDimmer = rawTargetDimmer;
 
-        const int surplusW = -grid;
-        int maxStep = DIMMER_SURPLUS_FINE_STEP_PERCENT;
+        // Predictive command bound: /state can lag our previous HTTP command.
+        // Independently of that lag, never increase the command by more watts
+        // than the export visible right now (while preserving the -15 W bias).
+        // This permits an immediate 0->100% jump when >800 W is genuinely
+        // available, but only a small jump when export is small.
+        const int safeAdditionalHeaterW =
+            max(0, -grid + FRONIUS_GRID_TARGET_W);
+        const int maxSafeRequestedHeaterPower =
+            constrain(requestedHeaterPower + safeAdditionalHeaterW,
+                      0,
+                      FRONIUS_HEATER_POWER_W);
+        const int maxSafeRequestedDimmer =
+            heaterWattsToDimmerPercent(maxSafeRequestedHeaterPower);
 
-        if (surplusW >= DIMMER_SURPLUS_TURBO_W)
-            maxStep = DIMMER_SURPLUS_TURBO_STEP_PERCENT;
-        else if (surplusW >= DIMMER_SURPLUS_MEDIUM_W)
-            maxStep = DIMMER_SURPLUS_MEDIUM_STEP_PERCENT;
-
-        const int maxAllowedByStep =
-            min(FRONIUS_MAX_DIMMER, requestedDimmer + maxStep);
-        if (targetDimmer > maxAllowedByStep)
-            targetDimmer = maxAllowedByStep;
-
-        // RobotDyn feedback can lag the command by one or two control cycles.
-        // Allow a useful head start, but do not queue a large hidden increase
-        // that could suddenly turn into grid import when the dimmer catches up.
-        if (dimmerStateFresh) {
-            const int maxAllowedByFeedback =
-                min(FRONIUS_MAX_DIMMER,
-                    controlDimmer + DIMMER_SURPLUS_MAX_LEAD_PERCENT);
-            if (targetDimmer > maxAllowedByFeedback)
-                targetDimmer = maxAllowedByFeedback;
-        }
+        if (targetDimmer > requestedDimmer)
+            targetDimmer = min(targetDimmer, maxSafeRequestedDimmer);
     }
     // Inside the target band, keep the last requested value. Do not chase
     // every Fronius watt with another HTTP command.
@@ -335,7 +308,7 @@ void froniusZeroGridSimulation()
                               grid < 0 ? -grid : 0);
                 break;
             case ZERO_GRID_SURPLUS:
-                Serial.println("[ZERO] SURPLUS PV -> LOAD UP");
+                Serial.println("[ZERO] SURPLUS PV -> LOAD TRACK FAST");
                 break;
             case ZERO_GRID_IMPORT:
                 if (grid >= DIMMER_IMPORT_EMERGENCY_W)
