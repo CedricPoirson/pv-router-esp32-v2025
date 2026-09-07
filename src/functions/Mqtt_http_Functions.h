@@ -137,6 +137,8 @@ void publishHADiscovery()
                          "%", "", "measurement", "mdi:water-boiler-auto");
   publishSensorDiscovery("pvrouter_water_temp", "Température chauffe-eau", "water_temp",
                          "°C", "temperature", "measurement", "mdi:thermometer");
+  publishSensorDiscovery("pvrouter_water_temp_max", "Température maxi chauffe-eau", "water_temp_max",
+                         "°C", "temperature", "", "mdi:thermometer-check");
   publishSensorDiscovery("pvrouter_wifi", "WiFi RSSI", "wifi_rssi",
                          "dBm", "signal_strength", "measurement", "mdi:wifi", true);
   publishSensorDiscovery("pvrouter_state", "État", "status",
@@ -186,14 +188,17 @@ void Mqtt_publishState()
   if (availablePower < 0) availablePower = 0;
 
   const float waterTemp = gDisplayValues.temperature.toFloat();
+  const int remoteMaxTemp = gDisplayValues.dimmerMaxTemp;
+  const int effectiveMaxTemp = remoteMaxTemp > 0 ? remoteMaxTemp : config.tmax;
+
   const bool dimmerSynced =
       dimmerOnline &&
       (abs(dimmerCmd - dimmerActual) <= 2);
 
   const bool tempAtOrAboveMax =
       (waterTemp > 0.0f) &&
-      (config.tmax > 0) &&
-      (waterTemp >= (float)config.tmax);
+      (effectiveMaxTemp > 0) &&
+      (waterTemp >= (float)effectiveMaxTemp);
 
   String status;
   if (!gDisplayValues.froniusup) {
@@ -224,7 +229,7 @@ void Mqtt_publishState()
   const int wifiRssi = WiFi.isConnected() ? WiFi.RSSI() : -127;
 
   String payload;
-  payload.reserve(420);
+  payload.reserve(460);
   payload = "{";
   payload += "\"pv_w\":" + String(pvPower) + ",";
   payload += "\"grid_w\":" + String(gridPower) + ",";
@@ -235,6 +240,10 @@ void Mqtt_publishState()
   payload += "\"dimmer_actual\":" + String(dimmerActual) + ",";
   payload += "\"water_temp\":";
   if (waterTemp > 0.0f) payload += String(waterTemp, 1);
+  else payload += "null";
+  payload += ",";
+  payload += "\"water_temp_max\":";
+  if (remoteMaxTemp > 0) payload += String(remoteMaxTemp);
   else payload += "null";
   payload += ",";
   payload += "\"wifi_rssi\":" + String(wifiRssi) + ",";
