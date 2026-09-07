@@ -10,15 +10,12 @@
 #include <HTTPClient.h>
 #include <WiFi.h>
 
-// Real measured heater power at 100% dimmer. This value is deliberately the
-// physical resistance power used by the router, not RobotDyn /config.charge.
-#define FRONIUS_HEATER_POWER_W 800
-#define FRONIUS_MAX_DIMMER 100
-
-// Bias the controller slightly toward export so short load changes are less
-// likely to become grid import. Accepted steady band: -25 W .. -5 W.
-#define FRONIUS_GRID_TARGET_W -15
-#define FRONIUS_GRID_DEADBAND_W 10
+// Proven defaults. The Web V2 configuration can override these at runtime;
+// missing/old config.json files transparently keep these values.
+#define FRONIUS_DEFAULT_HEATER_POWER_W 800
+#define FRONIUS_DEFAULT_MAX_DIMMER 100
+#define FRONIUS_DEFAULT_GRID_TARGET_W -15
+#define FRONIUS_DEFAULT_GRID_DEADBAND_W 10
 
 // Grid import has priority. A real appliance load is removed from the routed
 // heater power immediately from the current Fronius sample, with a small
@@ -29,9 +26,7 @@
 #define DIMMER_IMPORT_EMERGENCY_RESERVE_W 50
 
 // V14.3 no longer uses arbitrary +3/+8/+20% ramps. The requested heater power
-// is calculated directly from P_Grid and the measured 800 W load. On surplus,
-// a second command-relative bound makes sure a new command cannot consume more
-// than the export that is actually visible in the current Fronius sample.
+// is calculated directly from P_Grid and the configured physical heater load.
 #define DIMMER_MIN_CHANGE 1
 #define DIMMER_HTTP_TIMEOUT_MS 500UL
 #define DIMMER_REFRESH_MS 60000UL
@@ -61,22 +56,62 @@ enum ZeroGridState {
     ZERO_GRID_LOAD_LIMITED
 };
 
+// Runtime settings are intentionally clamped here as a second safety layer in
+// addition to Web validation. This also protects imported/hand-edited JSON.
+static int froniusConfiguredHeaterPowerW()
+{
+    const int value = config.heaterPowerW > 0
+                          ? config.heaterPowerW
+                          : FRONIUS_DEFAULT_HEATER_POWER_W;
+    return constrain(value, 100, 5000);
+}
+
+static int froniusConfiguredMaxDimmer()
+{
+    const int value = config.dimmerMaxPercent > 0
+                          ? config.dimmerMaxPercent
+                          : FRONIUS_DEFAULT_MAX_DIMMER;
+    return constrain(value, 10, 100);
+}
+
+static int froniusConfiguredGridTargetW()
+{
+    const int value = config.gridTargetW != 0
+                          ? config.gridTargetW
+                          : FRONIUS_DEFAULT_GRID_TARGET_W;
+    return constrain(value, -200, 0);
+}
+
+static int froniusConfiguredGridDeadbandW()
+{
+    const int value = config.gridDeadbandW > 0
+                          ? config.gridDeadbandW
+                          : FRONIUS_DEFAULT_GRID_DEADBAND_W;
+    return constrain(value, 2, 100);
+}
+
+static int froniusConfiguredMaxHeaterPowerW()
+{
+    return (froniusConfiguredHeaterPowerW() * froniusConfiguredMaxDimmer()) / 100;
+}
+
 static int dimmerPercentToHeaterWatts(int percent)
 {
-    percent = constrain(percent, 0, FRONIUS_MAX_DIMMER);
-    return (FRONIUS_HEATER_POWER_W * percent) / 100;
+    percent = constrain(percent, 0, froniusConfiguredMaxDimmer());
+    return (froniusConfiguredHeaterPowerW() * percent) / 100;
 }
 
 static int heaterWattsToDimmerPercent(int watts)
 {
-    watts = constrain(watts, 0, FRONIUS_HEATER_POWER_W);
-    return (watts * 100 + (FRONIUS_HEATER_POWER_W / 2)) /
-           FRONIUS_HEATER_POWER_W;
+    const int heaterPowerW = froniusConfiguredHeaterPowerW();
+    watts = constrain(watts, 0, froniusConfiguredMaxHeaterPowerW());
+    const int percent = (watts * 100 + (heaterPowerW / 2)) / heaterPowerW;
+    return constrain(percent, 0, froniusConfiguredMaxDimmer());
 }
 
 bool sendDimmerPower(int power)
 {
-    power = constrain(power, 0, 100);
+    power = constrain(power, 0, froniusConfiguredMaxDimmer());
 
     if (WiFi.status() != WL_CONNECTED)
         return false;
@@ -141,7 +176,11 @@ void froniusZeroGridSimulation()
     lastFailsafeAttemptMs = 0;
 
     const int grid = (int)gDisplayValues.grid;
-    const int commandedDimmer = constrain(gDisplayValues.dimmer, 0, FRONIUS_MAX_DIMMER);
+    const int maxDimmer = froniusConfiguredMaxDimmer();
+    const int maxHeaterPowerW = froniusConfiguredMaxHeaterPowerW();
+    const int gridTargetW = froniusConfiguredGridTargetW();
+    const int gridDeadbandW = froniusConfiguredGridDeadbandW();
+    const int commandedDimmer = constrain(gDisplayValues.dimmer, 0, maxDimmer);
     const unsigned long now = millis();
 
     int reportedDimmer = gDisplayValues.dimmerReported;
@@ -162,22 +201,22 @@ void froniusZeroGridSimulation()
     // /state has not caught up yet. It is used by the predictive safety bound.
     const int requestedDimmer =
         lastSentDimmer >= 0
-            ? constrain(lastSentDimmer, 0, FRONIUS_MAX_DIMMER)
+            ? constrain(lastSentDimmer, 0, maxDimmer)
             : commandedDimmer;
     const int requestedHeaterPower = dimmerPercentToHeaterWatts(requestedDimmer);
 
-    const int gridLow = FRONIUS_GRID_TARGET_W - FRONIUS_GRID_DEADBAND_W;
-    const int gridHigh = FRONIUS_GRID_TARGET_W + FRONIUS_GRID_DEADBAND_W;
+    const int gridLow = gridTargetW - gridDeadbandW;
+    const int gridHigh = gridTargetW + gridDeadbandW;
 
     // Physics target: if heater power changes by X watts, P_Grid changes by
     // approximately +X watts. Therefore the heater power required to move the
-    // grid directly to FRONIUS_GRID_TARGET_W is:
+    // grid directly to the configured target is:
     //   Pheater_target = Pheater_now + (Pgrid_target - Pgrid_now)
     int rawTargetHeaterPower =
-        currentHeaterPower + (FRONIUS_GRID_TARGET_W - grid);
+        currentHeaterPower + (gridTargetW - grid);
     rawTargetHeaterPower = constrain(rawTargetHeaterPower,
                                      0,
-                                     FRONIUS_HEATER_POWER_W);
+                                     maxHeaterPowerW);
 
     const int rawTargetDimmer =
         heaterWattsToDimmerPercent(rawTargetHeaterPower);
@@ -199,7 +238,7 @@ void froniusZeroGridSimulation()
                 currentHeaterPower - grid - reserveW;
             fastTargetHeaterPower = constrain(fastTargetHeaterPower,
                                               0,
-                                              FRONIUS_HEATER_POWER_W);
+                                              maxHeaterPowerW);
 
             const int fastTargetDimmer =
                 heaterWattsToDimmerPercent(fastTargetHeaterPower);
@@ -214,15 +253,13 @@ void froniusZeroGridSimulation()
 
         // Predictive command bound: /state can lag our previous HTTP command.
         // Independently of that lag, never increase the command by more watts
-        // than the export visible right now (while preserving the -15 W bias).
-        // This permits an immediate 0->100% jump when >800 W is genuinely
-        // available, but only a small jump when export is small.
+        // than the export visible right now while preserving the target bias.
         const int safeAdditionalHeaterW =
-            max(0, -grid + FRONIUS_GRID_TARGET_W);
+            max(0, -grid + gridTargetW);
         const int maxSafeRequestedHeaterPower =
             constrain(requestedHeaterPower + safeAdditionalHeaterW,
                       0,
-                      FRONIUS_HEATER_POWER_W);
+                      maxHeaterPowerW);
         const int maxSafeRequestedDimmer =
             heaterWattsToDimmerPercent(maxSafeRequestedHeaterPower);
 
@@ -232,7 +269,7 @@ void froniusZeroGridSimulation()
     // Inside the target band, keep the last requested value. Do not chase
     // every Fronius watt with another HTTP command.
 
-    targetDimmer = constrain(targetDimmer, 0, FRONIUS_MAX_DIMMER);
+    targetDimmer = constrain(targetDimmer, 0, maxDimmer);
     gDisplayValues.dimmer = targetDimmer;
 
     const bool dimmerMismatch =
@@ -291,8 +328,7 @@ void froniusZeroGridSimulation()
     int zeroGridState = ZERO_GRID_HOLD;
 
     if (grid < gridLow) {
-        if (controlDimmer >= FRONIUS_MAX_DIMMER &&
-            targetDimmer >= FRONIUS_MAX_DIMMER)
+        if (controlDimmer >= maxDimmer && targetDimmer >= maxDimmer)
             zeroGridState = ZERO_GRID_LOAD_LIMITED;
         else
             zeroGridState = ZERO_GRID_SURPLUS;
