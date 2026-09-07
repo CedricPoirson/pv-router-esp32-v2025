@@ -86,6 +86,23 @@ static void drawDiagnosticRowTTGO(const String &label,
   display.print(value);
 }
 
+// Draw the degree sign as a tiny vector circle instead of relying on the
+// built-in TFT font. The latter does not contain the UTF-8 degree glyph on
+// this TTGO, which is why a literal "°C" was rendered as only "C".
+// Returns the x coordinate immediately after the C.
+static int drawDegreeCUnitTTGO(int x, int y, int font, int color, int bg)
+{
+  display.setTextFont(font);
+  display.setTextSize(1);
+  display.setTextColor(color, bg);
+  display.drawCircle(x + 2, y + 3, 2, color);
+
+  const int cX = x + 6;
+  display.setCursor(cX, y, font);
+  display.print("C");
+  return cX + display.textWidth("C", font);
+}
+
 // Slightly enlarged vector icons for better readability on the 240x135 TTGO.
 // No special font or bitmap is required.
 static void drawThermometerIcon(int x, int y, int color)
@@ -347,7 +364,6 @@ static void drawTTGOZeroGridDashboard()
       waterTemp > 0.0f ? String(waterTemp, 1) : "--.-";
   String tempMaxText = "/";
   tempMaxText += effectiveMaxTemp > 0 ? String(effectiveMaxTemp) : "--";
-  tempMaxText += "°C";
 
   display.setTextColor(tempColor, TFT_BLACK);
   display.setCursor(73, 2, 2);
@@ -357,6 +373,9 @@ static void drawTTGOZeroGridDashboard()
   display.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
   display.setCursor(tempMaxX, 2, 2);
   display.print(tempMaxText);
+
+  const int tempDegreeX = tempMaxX + display.textWidth(tempMaxText, 2) + 1;
+  drawDegreeCUnitTTGO(tempDegreeX, 2, 2, TFT_LIGHTGREY, TFT_BLACK);
 
   const int ceIconX = 158;
   const int ceTextX = 174;
@@ -580,14 +599,36 @@ static void drawTTGODiagnosticPage()
       gDisplayValues.dimmerMaxTemp > 0
           ? gDisplayValues.dimmerMaxTemp
           : config.tmax;
-  String temperatureText =
-      waterTemp > 0.0f ? String(waterTemp, 1) + "°C" : "--.-°C";
-  temperatureText += " / ";
-  temperatureText +=
-      effectiveMaxTemp > 0 ? String(effectiveMaxTemp) + "°C" : "--°C";
   const int tempColor =
       waterTemperatureColorTTGO(waterTemp, effectiveMaxTemp);
-  drawDiagnosticRowTTGO("Eau/Tmax", temperatureText, 102, tempColor);
+
+  display.setTextFont(2);
+  display.setTextSize(1);
+  display.setTextColor(TFT_WHITE, TFT_BLACK);
+  display.setCursor(3, 102, 2);
+  display.print("Eau/Tmax");
+
+  int valueX = 79;
+  const String currentTempText =
+      waterTemp > 0.0f ? String(waterTemp, 1) : "--.-";
+  display.setTextColor(tempColor, TFT_BLACK);
+  display.setCursor(valueX, 102, 2);
+  display.print(currentTempText);
+  valueX += display.textWidth(currentTempText, 2) + 1;
+  valueX = drawDegreeCUnitTTGO(valueX, 102, 2, tempColor, TFT_BLACK);
+
+  display.setTextColor(tempColor, TFT_BLACK);
+  display.setCursor(valueX + 2, 102, 2);
+  display.print(" / ");
+  valueX += 2 + display.textWidth(" / ", 2);
+
+  const String maxTempText =
+      effectiveMaxTemp > 0 ? String(effectiveMaxTemp) : "--";
+  display.setCursor(valueX, 102, 2);
+  display.print(maxTempText);
+  valueX += display.textWidth(maxTempText, 2) + 1;
+  drawDegreeCUnitTTGO(valueX, 102, 2, tempColor, TFT_BLACK);
+
   drawDiagnosticRowTTGO("Uptime", formatUptimeTTGO(now), 118, TFT_WHITE);
 }
 
