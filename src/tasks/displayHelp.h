@@ -53,7 +53,7 @@ static void drawTTGOHelpPage()
   display.setTextFont(1);
   display.setTextColor(TFT_WHITE, TFT_BLACK);
   display.setCursor(4, 126, 1);
-  display.print("Appui court: page suivante  |  long: ecran OFF");
+  display.print("Court: page | long: OFF | boot 3s: WiFi");
 }
 #endif
 
