@@ -2,10 +2,10 @@
 #define PV_ROUTER_VERSION_H
 
 // Project / firmware version. This is intentionally separate from the
-// Zero Grid controller revision so UI/documentation changes do not pretend to
-// modify the regulation algorithm itself.
-#define PV_ROUTER_FIRMWARE_VERSION "14.5"
-#define PV_ROUTER_FIRMWARE_LABEL "V14.5"
+// Zero Grid controller revision so UI/documentation/onboarding changes do not
+// pretend to modify the regulation algorithm itself.
+#define PV_ROUTER_FIRMWARE_VERSION "14.6"
+#define PV_ROUTER_FIRMWARE_LABEL "V14.6"
 
 // Regulation algorithm revision implemented in froniusZeroGrid.h.
 #define PV_ROUTER_ZERO_GRID_VERSION "14.3"
