@@ -2,7 +2,7 @@
 #define FRONIUS_ZERO_GRID_H
 
 // Fronius Zero Grid controller
-// V14 - asymmetric control: protect against grid import, smooth surplus capture
+// V14.1 - asymmetric control: protect against grid import, smooth surplus capture
 // Positive P_Grid = import from grid
 // Negative P_Grid = export to grid
 
@@ -21,11 +21,18 @@
 #define FRONIUS_GRID_DEADBAND_W 10
 
 // Asymmetric control tuning.
-// Import is the priority: a large import can unload the heater in one sample.
+// Grid import has priority over surplus capture. Small imports are corrected
+// without large oscillations; a real appliance load causes an immediate
+// physics-based heater reduction, with a small export reserve to compensate
+// for Fronius/RobotDyn feedback latency.
+#define DIMMER_IMPORT_FAST_W 80
+#define DIMMER_IMPORT_EMERGENCY_W 250
+#define DIMMER_IMPORT_FINE_STEP_PERCENT 8
+#define DIMMER_IMPORT_RESERVE_W 25
+#define DIMMER_IMPORT_EMERGENCY_RESERVE_W 50
+
 // Surplus is captured progressively so delayed RobotDyn/Fronius feedback does
 // not create the large 20% -> 60% -> 20% oscillations seen in field logs.
-#define DIMMER_IMPORT_FAST_W 120
-#define DIMMER_IMPORT_MAX_STEP_PERCENT 15
 #define DIMMER_SURPLUS_FAST_W 200
 #define DIMMER_SURPLUS_STEP_PERCENT 8
 #define DIMMER_SURPLUS_FINE_STEP_PERCENT 3
@@ -180,16 +187,35 @@ void froniusZeroGridSimulation()
     int targetDimmer = requestedDimmer;
 
     if (grid > gridHigh) {
-        // GRID IMPORT: reducing the dimmer reduces consumption immediately.
+        // GRID IMPORT: reducing the dimmer reduces grid consumption.
         // Never increase the requested heater power while the house imports.
         targetDimmer = min(rawTargetDimmer, requestedDimmer);
 
-        // A sudden appliance load gets priority. At >=120 W import we apply
-        // the physics-based target immediately; if the import exceeds the
-        // heater's present power this naturally drives POWER straight to 0.
-        if (grid < DIMMER_IMPORT_FAST_W) {
+        if (grid >= DIMMER_IMPORT_FAST_W) {
+            // Fast appliance-load path. Remove the measured import in one
+            // Fronius sample and deliberately leave a small export reserve.
+            // If the new appliance consumes more than the heater can shed,
+            // this naturally commands POWER=0 immediately.
+            const int reserveW =
+                grid >= DIMMER_IMPORT_EMERGENCY_W
+                    ? DIMMER_IMPORT_EMERGENCY_RESERVE_W
+                    : DIMMER_IMPORT_RESERVE_W;
+
+            int fastTargetHeaterPower =
+                currentHeaterPower - grid - reserveW;
+            fastTargetHeaterPower = constrain(fastTargetHeaterPower,
+                                              0,
+                                              FRONIUS_HEATER_POWER_W);
+
+            const int fastTargetDimmer =
+                heaterWattsToDimmerPercent(fastTargetHeaterPower);
+            targetDimmer = min(targetDimmer, fastTargetDimmer);
+        }
+        else {
+            // Close to zero, limit the correction to avoid a needless swing
+            // deep into export while still prioritising removal of grid draw.
             const int minAllowed =
-                max(0, requestedDimmer - DIMMER_IMPORT_MAX_STEP_PERCENT);
+                max(0, requestedDimmer - DIMMER_IMPORT_FINE_STEP_PERCENT);
             if (targetDimmer < minAllowed)
                 targetDimmer = minAllowed;
         }
@@ -293,7 +319,9 @@ void froniusZeroGridSimulation()
                 Serial.println("[ZERO] SURPLUS PV -> LOAD UP");
                 break;
             case ZERO_GRID_IMPORT:
-                if (grid >= DIMMER_IMPORT_FAST_W)
+                if (grid >= DIMMER_IMPORT_EMERGENCY_W)
+                    Serial.println("[ZERO] IMPORT EMERGENCY -> LOAD DOWN FAST");
+                else if (grid >= DIMMER_IMPORT_FAST_W)
                     Serial.println("[ZERO] IMPORT FAST -> LOAD DOWN");
                 else
                     Serial.println("[ZERO] IMPORT RESEAU -> LOAD DOWN");
