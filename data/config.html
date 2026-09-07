@@ -11,7 +11,7 @@
     a{color:inherit;text-decoration:none}button,input{font:inherit}.wrap{max-width:940px;margin:auto;padding:20px 18px 36px}
     header{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:20px}.brand{display:flex;align-items:center;gap:12px}.logo{width:44px;height:44px;border-radius:14px;background:linear-gradient(145deg,#42e686,#48c7ef);display:grid;place-items:center;color:#07130d;font-weight:900;font-size:22px}.title h1{margin:0;font-size:22px}.sub{font-size:13px;color:var(--muted);margin-top:3px}.btn{border:1px solid var(--line);background:#17243a;color:var(--text);padding:10px 13px;border-radius:11px;cursor:pointer}.btn.primary{background:#244b3a;border-color:#347354}.btn.danger{background:#402028;border-color:#78313b}.btn:hover{filter:brightness(1.12)}
     .layout{display:grid;grid-template-columns:1.2fr .8fr;gap:14px}.card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:17px;padding:18px;box-shadow:0 8px 20px #0003;margin-bottom:14px}.card h2{font-size:16px;margin:0 0 15px}.muted{color:var(--muted);font-size:13px;line-height:1.5}.field{margin-bottom:16px}.field label{display:block;font-size:13px;font-weight:750;margin-bottom:7px}.field small{display:block;color:var(--muted);font-size:12px;margin-top:6px;line-height:1.4}.field input{width:100%;border:1px solid var(--line);background:#0d1728;color:var(--text);border-radius:10px;padding:11px 12px;outline:none}.field input:focus{border-color:#4d719e;box-shadow:0 0 0 3px #4d719e22}.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:6px}.rows{display:grid;gap:10px}.row{display:flex;justify-content:space-between;align-items:center;gap:14px;border-bottom:1px solid #ffffff0b;padding-bottom:9px}.row:last-child{border-bottom:0;padding-bottom:0}.row span:first-child{color:var(--muted);font-size:13px}.row strong{text-align:right;font-size:14px}.notice{padding:12px 13px;border:1px solid #72571f;background:#382b10;border-radius:11px;color:#f8df9d;font-size:13px;line-height:1.45}.okmsg,.errmsg{display:none;margin-top:12px;padding:10px 12px;border-radius:10px;font-size:13px}.okmsg{background:#173927;color:#8ee8b2;border:1px solid #286244}.errmsg{background:#3a1b20;color:#ff9aa2;border:1px solid #6d2a34}
-    .pill{display:inline-block;padding:5px 8px;border-radius:999px;font-size:12px;font-weight:800;border:1px solid var(--line)}.ok{color:var(--green);border-color:#286244}.warn{color:var(--yellow);border-color:#72571f}.err{color:var(--red);border-color:#6d2a34}
+    .pill{display:inline-block;padding:5px 8px;border-radius:999px;font-size:12px;font-weight:800;border:1px solid var(--line)}.ok{color:var(--green);border-color:#286244}.warn{color:var(--yellow);border-color:#72571f}.err{color:var(--red);border-color:#6d2a34}.fileinput{display:none}
     @media(max-width:760px){.layout{grid-template-columns:1fr}.wrap{padding:16px 12px 28px}header{align-items:flex-start;flex-direction:column}}
   </style>
 </head>
@@ -27,25 +27,19 @@
       <section class="card">
         <h2>Paramètres actifs</h2>
         <form id="configForm">
-          <div class="field">
-            <label for="dimmerIp">Adresse IP RobotDyn</label>
-            <input id="dimmerIp" name="dimmer_ip" inputmode="decimal" placeholder="192.168.100.29" required>
-            <small>Adresse utilisée par le régulateur Zero Grid pour envoyer les commandes POWER au dimmer.</small>
-          </div>
-          <div class="field">
-            <label for="screenTimeout">Extinction automatique de l'écran (secondes)</label>
-            <input id="screenTimeout" name="screen_timeout_s" type="number" min="0" max="86400" step="1">
-            <small>0 = aucune extinction par timeout. L'extinction nocturne liée au Fronius reste indépendante.</small>
-          </div>
-          <div class="field">
-            <label for="fallbackTmax">Tmax ECS de secours (°C)</label>
-            <input id="fallbackTmax" name="fallback_tmax_c" type="number" min="1" max="90" step="1">
-            <small>Utilisée uniquement si le routeur ne peut pas lire <code>maxtemp</code> depuis le RobotDyn. La consigne RobotDyn reste prioritaire.</small>
-          </div>
+          <div class="field"><label for="dimmerIp">Adresse IP RobotDyn</label><input id="dimmerIp" name="dimmer_ip" inputmode="decimal" placeholder="192.168.100.29" required><small>Adresse utilisée par le régulateur Zero Grid pour envoyer les commandes POWER au dimmer.</small></div>
+          <div class="field"><label for="screenTimeout">Extinction automatique de l'écran (secondes)</label><input id="screenTimeout" name="screen_timeout_s" type="number" min="0" max="86400" step="1"><small>0 = aucune extinction par timeout. L'extinction nocturne liée au Fronius reste indépendante.</small></div>
+          <div class="field"><label for="fallbackTmax">Tmax ECS de secours (°C)</label><input id="fallbackTmax" name="fallback_tmax_c" type="number" min="1" max="90" step="1"><small>Utilisée uniquement si le routeur ne peut pas lire <code>maxtemp</code> depuis le RobotDyn. La consigne RobotDyn reste prioritaire.</small></div>
           <div class="actions"><button class="btn primary" type="submit">Enregistrer</button><button class="btn" type="button" onclick="loadConfig()">Annuler / relire</button></div>
-          <div class="okmsg" id="okmsg">Configuration enregistrée dans SPIFFS.</div>
-          <div class="errmsg" id="errmsg"></div>
+          <div class="okmsg" id="okmsg">Configuration enregistrée dans SPIFFS.</div><div class="errmsg" id="errmsg"></div>
         </form>
+      </section>
+
+      <section class="card">
+        <h2>Sauvegarde / restauration</h2>
+        <p class="muted">Sauvegarde le <strong>config.json complet</strong> de l'ESP32. C'est le fichier à conserver avant un <code>uploadfs</code>. Le Wi-Fi reste volontairement dans un fichier séparé.</p>
+        <div class="actions"><a class="btn primary" href="/api/config/export">Exporter config.json</a><button class="btn" type="button" onclick="document.getElementById('importFile').click()">Importer config.json</button><input class="fileinput" id="importFile" type="file" accept="application/json,.json" onchange="importConfig(this)"></div>
+        <div class="okmsg" id="backupOk"></div><div class="errmsg" id="backupErr"></div>
       </section>
 
       <section class="card">
@@ -53,32 +47,16 @@
         <div class="actions"><button class="btn" type="button" onclick="toggleScreen()">Basculer l'écran</button><a class="btn" href="/update">Mise à jour OTA</a><button class="btn danger" type="button" onclick="restartDevice()">Redémarrer l'ESP32</button></div>
       </section>
 
-      <section class="card">
-        <h2>À propos des autres anciens réglages</h2>
-        <div class="notice">La V2 n'affiche plus les anciens paramètres Sigma, cosphi, Domoticz, Jeedom, IDX ou polarité parce qu'ils ne pilotent pas la régulation Fronius Zero Grid actuelle. Le serveur conserve temporairement les anciens endpoints pour compatibilité, mais cette page n'expose que les réglages réellement utiles.</div>
-      </section>
+      <section class="card"><h2>À propos des autres anciens réglages</h2><div class="notice">La V2 n'affiche plus les anciens paramètres Sigma, cosphi, Domoticz, Jeedom, IDX ou polarité parce qu'ils ne pilotent pas la régulation Fronius Zero Grid actuelle. Le serveur conserve temporairement les anciens endpoints pour compatibilité, mais cette page n'expose que les réglages réellement utiles.</div></section>
     </main>
 
     <aside>
       <section class="card">
         <h2>État en direct</h2>
-        <div class="rows">
-          <div class="row"><span>Régulation</span><strong id="state">—</strong></div>
-          <div class="row"><span>Fronius</span><strong id="fronius">—</strong></div>
-          <div class="row"><span>RobotDyn</span><strong id="dimmer">—</strong></div>
-          <div class="row"><span>Température ECS</span><strong id="temp">—</strong></div>
-          <div class="row"><span>Tmax RobotDyn</span><strong id="remoteMax">—</strong></div>
-          <div class="row"><span>Commande / réel</span><strong id="cmdActual">—</strong></div>
-          <div class="row"><span>Wi-Fi ESP32</span><strong id="wifi">—</strong></div>
-          <div class="row"><span>Wi-Fi RobotDyn</span><strong id="dimmerRssi">—</strong></div>
-        </div>
+        <div class="rows"><div class="row"><span>Régulation</span><strong id="state">—</strong></div><div class="row"><span>Fronius</span><strong id="fronius">—</strong></div><div class="row"><span>RobotDyn</span><strong id="dimmer">—</strong></div><div class="row"><span>Température ECS</span><strong id="temp">—</strong></div><div class="row"><span>Tmax RobotDyn</span><strong id="remoteMax">—</strong></div><div class="row"><span>Commande / réel</span><strong id="cmdActual">—</strong></div><div class="row"><span>Wi-Fi ESP32</span><strong id="wifi">—</strong></div><div class="row"><span>Wi-Fi RobotDyn</span><strong id="dimmerRssi">—</strong></div><div class="row"><span>MQTT</span><strong id="mqtt">—</strong></div><div class="row"><span>Mémoire libre</span><strong id="heap">—</strong></div></div>
       </section>
 
-      <section class="card">
-        <h2>Valeurs fixes de cette version</h2>
-        <div class="rows"><div class="row"><span>Puissance chauffe-eau</span><strong id="heaterPower">800 W</strong></div><div class="row"><span>MQTT</span><strong>config.h au build</strong></div><div class="row"><span>API temps réel</span><strong>/api/status</strong></div></div>
-        <p class="muted" style="margin-bottom:0">Le serveur Web n'intervient pas dans la boucle de régulation. Fronius, Zero Grid et les sécurités continuent de fonctionner même si cette page est fermée.</p>
-      </section>
+      <section class="card"><h2>Valeurs fixes de cette version</h2><div class="rows"><div class="row"><span>Puissance chauffe-eau</span><strong id="heaterPower">800 W</strong></div><div class="row"><span>Zero Grid</span><strong>-15 W · -25…-5 W</strong></div><div class="row"><span>MQTT</span><strong>config.h au build</strong></div><div class="row"><span>API temps réel</span><strong>/api/status</strong></div></div><p class="muted" style="margin-bottom:0">Le serveur Web n'intervient pas dans la boucle de régulation. Fronius, Zero Grid et les sécurités continuent de fonctionner même si cette page est fermée.</p></section>
     </aside>
   </div>
 </div>
@@ -86,21 +64,22 @@
   const $=id=>document.getElementById(id);
   function showOk(){ $('okmsg').style.display='block';$('errmsg').style.display='none';setTimeout(()=>$('okmsg').style.display='none',3500)}
   function showErr(msg){$('errmsg').textContent=msg;$('errmsg').style.display='block';$('okmsg').style.display='none'}
-  async function loadConfig(){
-    try{const r=await fetch('/api/config',{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);const c=await r.json();$('dimmerIp').value=c.dimmer_ip||'';$('screenTimeout').value=c.screen_timeout_s??0;$('fallbackTmax').value=c.fallback_tmax_c??65;$('heaterPower').textContent=(c.heater_power_w||800)+' W';}
-    catch(e){showErr('Impossible de lire la configuration : '+e.message)}
+  function backupMsg(msg,ok=true){$('backupOk').style.display=ok?'block':'none';$('backupErr').style.display=ok?'none':'block';(ok?$('backupOk'):$('backupErr')).textContent=msg}
+  async function loadConfig(){try{const r=await fetch('/api/config',{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);const c=await r.json();$('dimmerIp').value=c.dimmer_ip||'';$('screenTimeout').value=c.screen_timeout_s??0;$('fallbackTmax').value=c.fallback_tmax_c??65;$('heaterPower').textContent=(c.heater_power_w||800)+' W'}catch(e){showErr('Impossible de lire la configuration : '+e.message)}}
+  $('configForm').addEventListener('submit',async e=>{e.preventDefault();const body=new URLSearchParams(new FormData(e.target));try{const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body});const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));showOk();loadConfig()}catch(e){showErr(e.message)}});
+  async function importConfig(input){
+    const file=input.files&&input.files[0];if(!file)return;
+    try{
+      const text=await file.text();JSON.parse(text);
+      if(!confirm(`Restaurer ${file.name} sur le PV Router ?\n\nLe fichier config.json actuel sera remplacé.`)){input.value='';return}
+      const body=new URLSearchParams();body.set('config_json',text);
+      const r=await fetch('/api/config/import',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body});const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));
+      backupMsg('Configuration restaurée et appliquée. Un redémarrage est conseillé.');loadConfig();
+    }catch(e){backupMsg('Import impossible : '+e.message,false)}finally{input.value=''}
   }
-  $('configForm').addEventListener('submit',async e=>{
-    e.preventDefault();const body=new URLSearchParams(new FormData(e.target));
-    try{const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body});const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));showOk();loadConfig();}
-    catch(e){showErr(e.message)}
-  });
-  async function refreshStatus(){
-    try{const r=await fetch('/api/status',{cache:'no-store'});if(!r.ok)return;const s=await r.json();$('state').textContent=s.status||'—';$('fronius').innerHTML=`<span class="pill ${s.fronius?'ok':'err'}">${s.fronius?'OK':'OFF'}</span>`;$('dimmer').innerHTML=`<span class="pill ${s.dimmer.online?'ok':'err'}">${s.dimmer.online?'OK':'OFF'}</span>`;$('temp').textContent=s.ecs.temp_c==null?'—':Number(s.ecs.temp_c).toFixed(1)+' °C';$('remoteMax').textContent=s.ecs.remote_max_c?`${s.ecs.remote_max_c} °C`:'indisponible';$('cmdActual').textContent=`${s.dimmer.cmd}% / ${s.dimmer.actual}%`;$('wifi').textContent=s.wifi_rssi+' dBm';$('dimmerRssi').textContent=s.dimmer.rssi+' dBm';}
-    catch(e){}
-  }
-  async function toggleScreen(){try{await fetch('/api/screen/toggle',{method:'POST'});}catch(e){showErr('Commande écran impossible')}}
-  async function restartDevice(){if(!confirm('Redémarrer le PV Router maintenant ?'))return;try{await fetch('/api/restart',{method:'POST'});alert('Redémarrage demandé. La page sera à nouveau disponible dans quelques secondes.');}catch(e){}}
+  async function refreshStatus(){try{const r=await fetch('/api/status',{cache:'no-store'});if(!r.ok)return;const s=await r.json();$('state').textContent=s.status||'—';$('fronius').innerHTML=`<span class="pill ${s.fronius?'ok':'err'}">${s.fronius?'OK':'OFF'}</span>`;$('dimmer').innerHTML=`<span class="pill ${s.dimmer.online?'ok':'err'}">${s.dimmer.online?'OK':'OFF'}</span>`;$('temp').textContent=s.ecs.temp_c==null?'—':Number(s.ecs.temp_c).toFixed(1)+' °C';$('remoteMax').textContent=s.ecs.remote_max_c?`${s.ecs.remote_max_c} °C`:'indisponible';$('cmdActual').textContent=`${s.dimmer.cmd}% / ${s.dimmer.actual}%`;$('wifi').textContent=s.wifi_rssi+' dBm';$('dimmerRssi').textContent=s.dimmer.rssi+' dBm';$('mqtt').textContent=s.mqtt_connected?'Connecté':'Déconnecté';$('heap').textContent=Math.round(Number(s.heap_free||0)/1024)+' kB'}catch(e){}}
+  async function toggleScreen(){try{await fetch('/api/screen/toggle',{method:'POST'})}catch(e){showErr('Commande écran impossible')}}
+  async function restartDevice(){if(!confirm('Redémarrer le PV Router maintenant ?'))return;try{await fetch('/api/restart',{method:'POST'});alert('Redémarrage demandé. La page sera à nouveau disponible dans quelques secondes.')}catch(e){}}
   loadConfig();refreshStatus();setInterval(refreshStatus,3000);
 </script>
 </body>
