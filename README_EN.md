@@ -4,12 +4,12 @@
 
 Photovoltaic surplus router for **ESP32 / TTGO T-Display**, using real-time measurements from a **Fronius inverter + Smart Meter** and HTTP control of a **RobotDyn Wi-Fi dimmer** driving a resistive water-heater load.
 
-The goal is to consume as much PV surplus locally as possible while keeping the grid exchange close to zero, with a deliberate slight export bias to reduce short grid imports during fast load or PV changes.
+The goal is to consume PV surplus locally while keeping grid exchange as close to zero as possible, with a deliberate slight export bias to reduce short grid imports during fast load or PV changes.
 
-> **PV Router firmware: V14.4**  
+> **PV Router firmware: V14.6**  
 > **Zero Grid control algorithm: V14.3**  
 > **Fronius interface: Solar API v1**  
-> **Fronius endpoint used: `/solar_api/v1/GetPowerFlowRealtimeData.fcgi`**  
+> **Fronius endpoint: `/solar_api/v1/GetPowerFlowRealtimeData.fcgi`**  
 > **Tested RobotDyn dimmer firmware: `Version 20260514`**
 
 ![TTGO Router](./img/routeur.jpg)
@@ -20,25 +20,25 @@ The goal is to consume as much PV surplus locally as possible while keeping the 
 
 This project is an **adaptation and evolution of the ESP32 PV Router by xlyric / C_Lyric**:
 
-- original PV Router project: https://github.com/xlyric/pv-router-esp32
+- upstream project: https://github.com/xlyric/pv-router-esp32
 - upstream author / maintainer: **xlyric / C_Lyric**
 - community associated with the original project: **APPER**
 
 Many thanks to **xlyric / C_Lyric** for publishing and maintaining this work as open source, and to the APPER community contributors. This repository would not exist in its current form without that foundation.
 
-This branch also uses the Wi-Fi dimmer project from the same author:
+The Wi-Fi dimmer used by this branch is also based on the same author's project:
 
 - **PV-discharge-Dimmer-AC-Dimmer-KIT-Robotdyn**: https://github.com/xlyric/PV-discharge-Dimmer-AC-Dimmer-KIT-Robotdyn
 
-The dimmer used here is a **RobotDyn / D1 mini** controlled over HTTP. The RobotDyn firmware validated with this branch is `Version 20260514`.
+The hardware used here is a **RobotDyn / D1 mini** controlled over HTTP. The RobotDyn firmware validated with this branch is `Version 20260514`.
 
-This adaptation intentionally differs from the original PV Router in several important areas: the **Fronius Smart Meter, read through Fronius Solar API v1, is now the regulation source of truth**, the active control loop no longer uses the SCT013 as its primary measurement source, the Zero Grid controller is predictive, and the Web UI / TTGO display have been extensively redesigned.
+This adaptation intentionally differs from the original PV Router in several major areas: the **Fronius Smart Meter read through Fronius Solar API v1 is the regulation source of truth**, the active loop no longer uses SCT013 as its primary measurement source, the Zero Grid controller is predictive, and the Web UI / TTGO display have been extensively redesigned.
 
 > This repository is a personal adaptation of the upstream project and should not be presented as an official release from xlyric or the APPER association.
 
 ---
 
-## 1. Architecture
+# 1. Architecture
 
 ```text
                          230 V grid
@@ -70,27 +70,25 @@ MQTT, Home Assistant, the Web dashboard and the TTGO screen are telemetry / user
 
 ---
 
-## 2. Tested hardware
+# 2. Reference hardware
 
-Reference setup used for this project:
+Tested setup:
 
-- ESP32 **TTGO T-Display**, 240 × 135, ST7789 controller;
+- ESP32 **TTGO T-Display**, 240 × 135, ST7789;
 - **Fronius Primo 6.0-1** inverter;
 - **Fronius Smart Meter TS 65A-1**;
 - **RobotDyn / D1 mini** Wi-Fi dimmer;
 - tested RobotDyn firmware: `Version 20260514`;
-- BTA16 triac in the currently used dimmer hardware;
-- Dallas / DS18B20 probe connected to the RobotDyn for DHW temperature;
+- BTA16 triac in the current reference dimmer hardware;
+- Dallas / DS18B20 probe on the RobotDyn side for DHW temperature;
 - resistive water-heater load calibrated in the PV Router to **800 W**;
 - optional MQTT / Home Assistant telemetry.
 
-The repository still contains some legacy code from the former local CT measurement path, but this branch is designed and maintained around **Fronius Solar API v1 measurement**.
+The repository still contains some legacy local CT-measurement code, but this branch is designed and maintained around **Fronius Solar API v1 measurement**.
 
 ---
 
-# Fronius: Zero Grid source of truth
-
-## 3. Fronius API used
+# 3. Fronius: Zero Grid source of truth
 
 The firmware directly queries:
 
@@ -98,9 +96,9 @@ The firmware directly queries:
 GET http://<IP_FRONIUS>/solar_api/v1/GetPowerFlowRealtimeData.fcgi
 ```
 
-This is the **Fronius Solar API v1** real-time PowerFlow endpoint. This branch **does not use MQTT, Modbus or Home Assistant as the regulation measurement source**.
+This is the **Fronius Solar API v1** real-time PowerFlow endpoint. This branch does not use MQTT, Modbus or Home Assistant as the regulation measurement source.
 
-A JSON sample is accepted only if:
+A sample is accepted only when:
 
 - HTTP returns 200;
 - the JSON is valid;
@@ -127,14 +125,7 @@ P_Grid > 0  = grid import
 P_Grid < 0  = grid export
 ```
 
-Example:
-
-```text
-P_PV   = 4800 W
-P_Grid = -1200 W
-```
-
-means approximately 4.8 kW PV production and 1.2 kW exported to the grid.
+Example: `P_PV=4800 W` and `P_Grid=-1200 W` means about 4.8 kW PV production and 1.2 kW exported.
 
 ### Fronius timing
 
@@ -144,15 +135,13 @@ HTTP timeout            : 700 ms
 Sample considered stale : after 4 s
 ```
 
-Each validated Fronius sample increments a sample counter. The controller makes **at most one regulation decision per new validated sample**, preventing repeated calculations from the same measurement.
+Each validated Fronius sample increments a sample counter. The controller makes at most one regulation decision per new validated sample.
 
 ---
 
-# Zero Grid regulation V14.3
+# 4. Zero Grid regulation V14.3
 
-## 4. Target and defaults
-
-Default V14.3 settings:
+Default settings:
 
 ```text
 Heater resistance power : 800 W
@@ -162,9 +151,9 @@ Deadband                 : ±10 W
 Effective target band    : -25 W to -5 W
 ```
 
-A small amount of export is therefore deliberately kept.
+A small amount of export is deliberately kept.
 
-These values can now be changed from Web V2 and are stored in `config.json`:
+These values are stored in `config.json` and can be changed from Web V2:
 
 ```json
 {
@@ -175,19 +164,13 @@ These values can now be changed from Web V2 and are stored in `config.json`:
 }
 ```
 
-Older `config.json` files remain compatible: if these keys are missing, the defaults above are used.
-
-## 5. Control calculation
-
-`P_Grid` already includes the effect of the heater whenever it is running. The router therefore starts from the heater power currently applied and computes the correction required to bring the grid toward the target.
-
-Physical approximation:
+Physical control principle:
 
 ```text
 Pheater_target = Pheater_current + (Pgrid_target - Pgrid_current)
 ```
 
-Example with an 800 W calibrated load:
+Example with an 800 W heater:
 
 ```text
 Actual dimmer        : 50 %  -> ~400 W
@@ -198,11 +181,9 @@ Target heater power  : ~585 W
 Target dimmer        : ~73 %
 ```
 
-V14.3 no longer relies on arbitrary `+3/+8/+20 %` upward ramps. It moves directly toward the physics-based target, with a predictive bound preventing the controller from requesting more additional heater power than the currently visible export can safely provide.
+V14.3 no longer relies on arbitrary upward ramps. Downward power changes remain unrestricted so a newly started household load can shed the heater quickly.
 
-## 6. Grid-import reaction
-
-Grid import has priority. Internal thresholds currently are:
+Current internal thresholds:
 
 ```text
 Fast import threshold      : 80 W
@@ -211,25 +192,15 @@ Fast reserve               : 25 W
 Emergency reserve          : 50 W
 ```
 
-Downward power changes are not ramp-limited. If a large appliance starts in the house, the heater can be shed immediately.
-
-## 7. Load saturation
-
-If the dimmer reaches its configured maximum and PV surplus remains:
-
-```text
-LOAD LIMITED
-```
-
-The router cannot physically absorb any more power, so the remaining surplus is exported to the grid.
+When the dimmer is already at its configured limit and surplus remains, state may become `LOAD LIMITED`: remaining energy is exported because no more heater load is available.
 
 ---
 
-# RobotDyn
+# 5. RobotDyn
 
-## 8. Power command
+## Power command
 
-The PV Router sends an **absolute dimmer command**:
+The PV Router sends an absolute command:
 
 ```text
 GET http://<IP_DIMMER>/?POWER=<0..100>
@@ -243,7 +214,7 @@ Examples:
 /?POWER=100
 ```
 
-With an 800 W physically calibrated heater:
+With an 800 W calibrated heater:
 
 ```text
 1 %   ~= 8 W
@@ -251,46 +222,29 @@ With an 800 W physically calibrated heater:
 100 % ~= 800 W
 ```
 
-The RobotDyn `/config.charge` value may be different: **the regulation uses the physical heater power configured in the PV Router**, not the RobotDyn `charge` value automatically.
+The RobotDyn `/config.charge` value may be different: regulation uses the physical heater power configured in the PV Router.
 
-## 9. RobotDyn real-time state
+## Real-time state
 
 ```text
 GET http://<IP_DIMMER>/state
 ```
 
-Example:
+The PV Router reads fields such as `dimmer`, `commande`, `dallas0`, `temperature`, `RSSI`, `version`, `onoff` and `alerte`.
 
-```json
-{
-  "dimmer": 0,
-  "commande": 0,
-  "temperature": "55.5",
-  "power": 0,
-  "Ptotal": 0,
-  "RSSI": -59,
-  "version": "Version 20260514",
-  "onoff": true,
-  "alerte": "RAS",
-  "dallas0": "55.5"
-}
-```
+`dallas0` is preferred for DHW temperature, with `temperature` as fallback.
 
-The PV Router prefers `dallas0` for DHW temperature and falls back to `temperature` if needed.
-
-Polling cadence:
+Timing:
 
 ```text
 Dimmer catching up / unsynchronised : ~2 s
 Dimmer synchronised                 : ~5 s
 HTTP timeout                        : 500 ms
+Command keepalive                   : 60 s
+Reference RobotDyn auto-off         : 5 min
 ```
 
-The command is refreshed every **60 s**, comfortably below the RobotDyn 5-minute auto-off.
-
-A significant `CMD / ACTUAL` mismatch lasting about 15 s causes the command to be resent.
-
-## 10. RobotDyn thermal configuration
+## Temperature, Tmax and trigger
 
 The PV Router also reads:
 
@@ -298,137 +252,146 @@ The PV Router also reads:
 GET http://<IP_DIMMER>/config
 ```
 
-Important fields are:
+Important fields: `maxtemp`, `trigger`, `minpow`, `maxpow`, `charge`.
 
-```text
-maxtemp
-trigger
-minpow
-maxpow
-charge
-```
+RobotDyn `maxtemp` takes priority over the PV Router fallback `tmax`.
 
-`maxtemp` is the normal RobotDyn thermal setpoint and takes priority over the PV Router fallback `tmax`.
-
-`trigger` is the thermal hysteresis expressed as a percentage of `maxtemp`.
-
-The tested RobotDyn firmware uses integer arithmetic and effectively applies:
+The tested RobotDyn firmware uses integer arithmetic and applies:
 
 ```text
 release = maxtemp - ((maxtemp * trigger) / 100)
 ```
 
-with integer truncation.
-
-Current example:
+Example:
 
 ```text
 maxtemp = 56 °C
 trigger = 3 %
-
 (56 * 3) / 100 = 1
 release = 55 °C
 ```
 
-The PV Router mirrors **the exact same formula**. After `TEMP MAX` is reached, heating stays inhibited (`TEMP HOLD`) until the release temperature is reached.
+The PV Router mirrors this exact formula. Once `TEMP MAX` is reached, heating remains inhibited (`TEMP HOLD`) until the release temperature is reached.
 
-If `/config` is unavailable, a conservative **2 °C** fallback hysteresis is temporarily used.
-
-`/config` polling cadence:
-
-```text
-After success       : every 30 s
-Until first success : retry every 10 s
-```
+If `/config` is unavailable, a conservative 2 °C fallback is temporarily used.
 
 ---
 
-# Safety / fail-safe
-
-## 11. Conditions forcing POWER=0
+# 6. Safety / fail-safe
 
 The PV Router requests `POWER=0` when:
 
-- the Fronius is unreachable;
+- Fronius is unreachable;
 - the latest Fronius sample is older than 4 s;
 - `autonome=false`;
 - RobotDyn reports `onoff=false`;
 - a non-temperature RobotDyn alarm is active;
 - the local DHW temperature protection is active.
 
-A failed fail-safe request is retried quickly. An acknowledged safety command is also refreshed periodically.
-
-**MQTT and Home Assistant are not part of this safety chain.**
+MQTT and Home Assistant are not part of this safety chain.
 
 ---
 
-# TTGO display
+# 7. First Wi-Fi setup — V14.6
 
-## 12. Main dashboard
+V14.6 adds a **physically triggered Wi-Fi setup mode**. It never appears just because the home router is unavailable.
 
-The TTGO dashboard shows, among other information:
+## Enter setup mode
 
-- time;
-- DHW temperature / Tmax;
-- `CE OK`, `CE SYNC`, `TEMP MAX`, `TEMP HOLD` states;
-- large `IMPORT`, `ZERO GRID`, `DISPO` or `SURPLUS` banner;
-- PV production;
-- grid import/export;
-- water-heater percentage and power;
-- estimated house consumption;
-- release temperature while thermal hold is active;
-- power gauge.
+1. power the PV Router off;
+2. hold the TTGO user button (`GPIO35`);
+3. power the PV Router back on while keeping the button pressed;
+4. hold for about **3 seconds**;
+5. release when the display shows `MODE CONFIG WIFI`.
 
-V14.4 uses a **differential renderer**: only fields whose visible value changes are redrawn, reducing periodic ST7789 flicker.
-
-A short button press switches to the diagnostic page. A long press keeps the manual screen-off function.
-
-## 13. Graphical boot screen
-
-Startup shows:
+The TTGO shows:
 
 ```text
-PV ROUTER
-FW V14.4 | ZERO GRID V14.3
+Wi-Fi : PVRouter-Setup
+Password : pvrouter14
+http://192.168.4.1
 ```
 
-with a vector energy-flow illustration:
+From a phone or computer join:
 
 ```text
-sun -> house -> water heater -> grid
+SSID     : PVRouter-Setup
+Password : pvrouter14
 ```
 
-and staged Wi-Fi, configuration, Web server and ready states.
+The captive portal may open automatically. Otherwise browse to:
+
+```text
+http://192.168.4.1
+```
+
+The FR/EN page lists detected Wi-Fi networks and lets you enter the home SSID and password. After **Save and restart**, credentials are stored in `/wifi.json` and the ESP32 reboots.
+
+Credential priority is now:
+
+```text
+1. /wifi.json when a real SSID is stored
+2. WIFI_NETWORK / WIFI_PASSWORD from config.h as fallback
+```
+
+The historical `xxx` value simply means no valid SPIFFS Wi-Fi configuration is present.
+
+If the home network stays unavailable for `WIFI_TIMEOUT` (20 s by default), boot no longer blocks forever: the firmware continues in offline mode and retries in the background. The maintenance access point is not opened automatically.
+
+The V14.6 setup portal currently configures **Wi-Fi only**. Fronius IP, MQTT and other settings remain configured as described below.
+
+Dedicated guides:
+
+- [Première configuration Wi-Fi — français](./docs/WIFI_SETUP_FR.md)
+- [First Wi-Fi setup — English](./docs/WIFI_SETUP_EN.md)
 
 ---
 
-# Web V2
+# 8. TTGO display
 
-## 14. Dashboard
+The main dashboard shows time, DHW temperature/Tmax, heater state, the large `IMPORT` / `ZERO GRID` / `DISPO` / `SURPLUS` banner, PV, grid, heater, house and the power gauge.
+
+Rendering is **differential**: only areas whose visible value changes are redrawn, reducing ST7789 flicker.
+
+Normal-operation button behavior:
+
+```text
+Short press : main -> diagnostics -> help -> main
+Long press  : screen OFF
+```
+
+The help page explains `T/Tmax`, `CE OK`, `TEMP MAX`, `TEMP HOLD`, `IMPORT`, `DISPO`, `SURPLUS`, `PV`, `EXP/IMP`, `CE % / W` and `REPRISE`.
+
+At startup, the graphical boot screen shows the PV Router logo, versions, a vector energy-flow illustration and Wi-Fi / configuration / Web-server / ready stages.
+
+---
+
+# 9. Web V2
+
+Dashboard:
 
 ```text
 http://<ROUTER_IP>/
 ```
 
-The dashboard is self-contained and does not require a CDN. It shows:
-
-- PV / grid / house / heater measurements;
-- Fronius / RobotDyn / MQTT states;
-- DHW temperature and Tmax;
-- V14.3 regulation target, band, correction and CMD / ACTUAL;
-- browser-side history for about 30 minutes;
-- copyable diagnostic report;
-- free heap and uptime.
-
-Graph history stays in the browser and does not continuously write to ESP32 flash.
-
-## 15. Configuration
+Configuration:
 
 ```text
 http://<ROUTER_IP>/config.html
 ```
 
-Currently editable V14 settings:
+The dashboard provides:
+
+- PV / grid / house / heater;
+- Fronius / RobotDyn / MQTT states;
+- DHW temperature / Tmax / trigger / release;
+- Zero Grid target, band, correction and CMD / ACTUAL;
+- about 30 minutes of browser-side history with no continuous flash writes;
+- copyable diagnostics;
+- free heap and uptime;
+- TTGO screen explanation/help.
+
+Currently editable Web V2 settings:
 
 ```text
 RobotDyn IP address
@@ -440,88 +403,52 @@ Deadband
 Maximum dimmer percentage
 ```
 
-Sensitive fast-control thresholds intentionally remain firmware constants.
-
-## 16. Local PV Router Web API
-
-### Full status
+Local API:
 
 ```text
-GET /api/status
-```
-
-The JSON explicitly exposes:
-
-```text
-version / firmware_version = V14.4
-fronius_api                 = Solar API v1
-fronius_powerflow_path      = /solar_api/v1/GetPowerFlowRealtimeData.fcgi
-regulation.version          = V14.3
-```
-
-plus PV, grid, house, heater, DHW, RobotDyn, MQTT, uptime and memory information.
-
-### Configuration
-
-```text
+GET  /api/status
 GET  /api/config
 POST /api/config
-```
-
-### Backup / restore
-
-```text
 GET  /api/config/export
 POST /api/config/import
-```
-
-### Screen / restart
-
-```text
 POST /api/screen/toggle
 POST /api/restart
 ```
 
+`/api/status` explicitly exposes:
+
+```text
+firmware_version       = V14.6
+fronius_api            = Solar API v1
+fronius_powerflow_path = /solar_api/v1/GetPowerFlowRealtimeData.fcgi
+regulation.version     = V14.3
+```
+
 ---
 
-# MQTT / Home Assistant
+# 10. MQTT / Home Assistant
 
-## 17. MQTT
-
-Main state topic:
+Main topic:
 
 ```text
 pvrouter/state
 ```
 
-Availability topic:
+Availability:
 
 ```text
 pvrouter/availability
 ```
 
-Published data includes:
-
-- PV production;
-- grid power;
-- estimated house consumption;
-- available power;
-- water-heater power;
-- dimmer command;
-- actual dimmer;
-- DHW temperature and Tmax;
-- RSSI;
-- Fronius state;
-- RobotDyn state;
-- dimmer synchronisation state.
+Published data includes PV, grid, house, available power, heater, dimmer command/actual, temperature/Tmax, RSSI and Fronius/RobotDyn states.
 
 Home Assistant Discovery is available when `HA_ENABLED` is enabled.
 
 ---
 
-# Installation / HOW TO
+# 11. Installation / HOW TO
 
-## 18. Clone the repository
+## Clone the repository
 
 ```bash
 git clone <REPOSITORY_URL>
@@ -531,19 +458,17 @@ git checkout feature/fronius-zero-grid-v13-dimmer-20260514
 
 The project uses **PlatformIO**.
 
-## 19. Create `src/config/config.h`
-
-This local file contains secrets and is not meant to be committed:
+## Create `src/config/config.h`
 
 ```bash
 cp src/config/config.example.h src/config/config.h
 ```
 
-At minimum, configure:
+Configure at least:
 
 ```cpp
-#define WIFI_NETWORK "MY_WIFI"
-#define WIFI_PASSWORD "MY_PASSWORD"
+#define WIFI_NETWORK "FALLBACK_WIFI"
+#define WIFI_PASSWORD "FALLBACK_PASSWORD"
 
 #define IP_FRONIUS "192.168.x.x"
 
@@ -552,6 +477,8 @@ At minimum, configure:
 #define MQTT_USER "my_user"
 #define MQTT_PASSWORD "my_password"
 ```
+
+Compile-time Wi-Fi credentials are now **fallback values**: a valid `/wifi.json` saved by the V14.6 portal takes priority.
 
 To disable MQTT:
 
@@ -565,23 +492,21 @@ To enable Home Assistant Discovery:
 #define HA_ENABLED true
 ```
 
-### Wi-Fi through SPIFFS
+## Prepare SPIFFS
 
-If `WIFI_PASSWORD` is intentionally set to `"xxx"`, the firmware attempts to use `/wifi.json` from SPIFFS. Otherwise the compile-time credentials from `config.h` are used.
-
-## 20. Prepare SPIFFS for a first installation
+For a full first installation:
 
 ```bash
 cp data/config.json.ori data/config.json
 cp data/wifi.json.ori data/wifi.json
 ```
 
-In `data/config.json`, verify at least:
+Verify at least in `config.json`:
 
 ```json
 {
   "autonome": false,
-  "dimmer": "192.168.100.29",
+  "dimmer": "192.168.x.x",
   "tmax": 65,
   "screentime": 0,
   "heater_power_w": 800,
@@ -593,47 +518,27 @@ In `data/config.json`, verify at least:
 
 `autonome=false` is recommended for the first flash. Set it to `true` only after Fronius and RobotDyn communication have been validated.
 
-## 21. Build
+`data/wifi.json` may remain with placeholders if you plan to use the physical V14.6 portal.
+
+## Build and flash
 
 ```bash
 pio run
-```
-
-GitHub Actions CI also builds the TTGO firmware on the working branch / pull request.
-
-## 22. Flash firmware
-
-```bash
 pio run -t upload
-```
-
-Then open the serial monitor:
-
-```bash
 pio device monitor -b 115200
 ```
 
-## 23. Flash SPIFFS
-
-For the first deployment or after changing `data/index.html`, `data/config.html`, etc.:
+To upload Web assets / SPIFFS:
 
 ```bash
 pio run -t uploadfs
 ```
 
-### IMPORTANT: `uploadfs` replaces the filesystem
+### Important: `uploadfs`
 
-`config.json` can therefore be lost if it is not backed up first.
+`uploadfs` replaces the SPIFFS filesystem and can overwrite both `config.json` **and `wifi.json`**.
 
-Recommended Web V2 procedure:
-
-1. open `http://<ROUTER_IP>/config.html`;
-2. click **Exporter config.json**;
-3. keep the downloaded file;
-4. only then run `uploadfs`;
-5. restore it with **Importer config.json** if needed.
-
-CLI backup of the complete file:
+Before a new `uploadfs`, export the real complete configuration file:
 
 ```bash
 curl --connect-timeout 5 http://<ROUTER_IP>/api/config/export -o data/config.json
@@ -641,15 +546,15 @@ pio run -t uploadfs
 rm data/config.json
 ```
 
-Do not save `/api/config` as `data/config.json`: `/api/config` is only a simplified Web configuration view, while `/api/config/export` returns the **complete SPIFFS configuration file**.
+From Web V2, use **Exporter config.json** before uploading and **Importer config.json** afterwards if required.
+
+For Wi-Fi, either keep `/wifi.json` or simply run the physical setup portal again after `uploadfs`.
 
 ---
 
-# Post-flash verification
+# 12. Post-flash checks
 
-## 24. Expected logs
-
-Healthy startup example:
+Expected logs:
 
 ```text
 WiFi connected
@@ -663,25 +568,15 @@ start Web server
 [MQTT] Connecting...connected
 ```
 
-Fronius must be ONLINE before routing is allowed.
-
-## 25. Test Fronius directly
-
-From a browser or `curl`:
+Test Fronius:
 
 ```text
 http://<IP_FRONIUS>/solar_api/v1/GetPowerFlowRealtimeData.fcgi
 ```
 
-Check at least:
+Check `Head.Status.Code == 0`, `Body.Data.Site.P_Grid` and preferably `P_PV`.
 
-```text
-Head.Status.Code = 0
-Body.Data.Site.P_Grid
-Body.Data.Site.P_PV
-```
-
-## 26. Test RobotDyn directly
+Test RobotDyn:
 
 ```bash
 curl http://<IP_DIMMER>/state
@@ -689,82 +584,41 @@ curl http://<IP_DIMMER>/config
 curl 'http://<IP_DIMMER>/?POWER=0'
 ```
 
-To change the thermal trigger directly on the tested RobotDyn firmware:
+Change the thermal trigger on the tested RobotDyn firmware:
 
 ```text
 http://<IP_DIMMER>/get?trigger=3&save=1
 ```
 
-then verify with:
+---
 
-```text
-http://<IP_DIMMER>/config
-```
+# 13. Quick diagnostics
+
+### `FRONIUS OFFLINE`
+
+Check `IP_FRONIUS`, LAN connectivity, Solar API v1, `P_Grid` and `Head.Status.Code`.
+
+### `DIMMER OFFLINE`
+
+Check `http://<IP_DIMMER>/state` and the RobotDyn address configured in Web V2 / `config.json`.
+
+### `TEMP MAX` / `TEMP HOLD`
+
+- `TEMP MAX`: Tmax reached;
+- `TEMP HOLD`: temperature is below Tmax but not yet down to the release threshold;
+- `REPRISE xx°C` shows the calculated release threshold.
+
+### No routing despite PV surplus
+
+Check in this order: Fronius ONLINE, RobotDyn ONLINE, `autonome=true`, `onoff=true`, no alarm, no `TEMP HOLD`, then confirm `P_Grid` becomes negative during export.
+
+### Wi-Fi lost
+
+The firmware retries in the background. To deliberately change networks, reboot while holding GPIO35 for about 3 seconds.
 
 ---
 
-# Quick diagnostics
-
-## 27. `FRONIUS OFFLINE`
-
-Check:
-
-- `IP_FRONIUS`;
-- ESP32-to-Fronius LAN connectivity;
-- that Solar API v1 responds;
-- that `P_Grid` exists and `Head.Status.Code == 0`.
-
-The fail-safe must keep `POWER=0` while Fronius data is not fresh.
-
-## 28. `DIMMER OFFLINE`
-
-Check:
-
-```text
-http://<IP_DIMMER>/state
-```
-
-and the address configured in Web V2 / `config.json`.
-
-## 29. Missing temperature
-
-`/state` must contain:
-
-```text
-dallas0
-```
-
-or, as a fallback:
-
-```text
-temperature
-```
-
-Displayed temperature is intentionally cleared when RobotDyn communication becomes stale, so an old temperature is never shown as live data.
-
-## 30. `TEMP MAX` / `TEMP HOLD`
-
-- `TEMP MAX`: water temperature has reached or exceeded `maxtemp`;
-- `TEMP HOLD`: temperature has fallen below Tmax but has not yet reached the release temperature derived from `trigger`;
-- `REPRISE xx°C` / release temperature is shown on the TTGO.
-
-## 31. No routing despite PV surplus
-
-Check in this order:
-
-1. Fronius ONLINE;
-2. RobotDyn ONLINE;
-3. `autonome=true`;
-4. `onoff=true`;
-5. no non-temperature alarm;
-6. no `TEMP HOLD`;
-7. `P_Grid` becomes negative when exporting.
-
----
-
-# OTA
-
-## 32. Web OTA update
+# 14. OTA
 
 ```text
 http://<ROUTER_IP>/update
@@ -772,84 +626,81 @@ http://<ROUTER_IP>/update
 
 The current firmware uses `AsyncElegantOTA`.
 
-**At present, the active `/update` route has no authentication configured.** It must therefore be considered accessible to devices that can reach the router on the LAN. The historical `otapassword` field in `config.json` is not applied to this active route.
+**No authentication is currently applied to `/update`.** This route must therefore be considered reachable by devices with LAN access. The historical `otapassword` field in `config.json` is not applied to the active route.
 
 ---
 
-# Project structure
-
-## 33. Main files
+# 15. Main files
 
 ```text
 src/main.cpp
-    initialisation and FreeRTOS task creation
+    boot, physical setup mode and FreeRTOS task creation
 
 src/config/version.h
     firmware / Zero Grid / Fronius API versions
 
+src/functions/wifiSetupPortal.h
+    PVRouter-Setup AP, captive portal and wifi.json save
+
+src/tasks/wifi-connection.h
+    Wi-Fi connection/reconnection and wifi.json priority
+
 src/tasks/measure-electricity.h
     Fronius Solar API v1 acquisition
 
-src/tasks/Dimmer.h
-    watchdog and one regulation action per fresh Fronius sample
-
 src/functions/froniusZeroGrid.h
-    Zero Grid V14.3 algorithm and RobotDyn POWER commands
+    Zero Grid V14.3 algorithm and RobotDyn commands
 
 src/tasks/gettemp.h
     RobotDyn /state + /config, Dallas, Tmax, trigger and hysteresis
 
-src/tasks/updateDisplay.h
-    TTGO drawing primitives / legacy renderer
-
 src/tasks/smoothDisplay.h
-    active V14.4 differential TTGO renderer
+    differential TTGO renderer
+
+src/tasks/displayHelp.h
+    third on-device help page
 
 src/tasks/bootScreen.h
     graphical vector boot screen
 
 src/functions/webFunctions.h
-    Web V2 and local /api/* endpoints
+    Web V2 and local API
 
 src/functions/Mqtt_http_Functions.h
-    MQTT telemetry and Home Assistant Discovery
+    MQTT and Home Assistant Discovery
 
 src/functions/spiffsFunctions.h
-    config.json and wifi.json read/write
+    config.json and wifi.json
 
 data/index.html
     Web V2 dashboard
 
 data/config.html
-    Web V2 configuration page
+    Web V2 configuration
 ```
 
 ---
 
-# Versions
+# 16. Versions
 
-## 34. V14.4 — current firmware
+## V14.6 — current firmware
 
-V14.4 currently includes:
+V14.6 mainly adds **physical Wi-Fi provisioning at boot**: 3-second button hold, `PVRouter-Setup` access point, captive portal at `192.168.4.1`, `wifi.json` persistence, stored-credential priority and non-blocking boot when home Wi-Fi is unavailable.
 
-- fast physics-based **Zero Grid V14.3** regulation;
-- Web-configurable regulation parameters;
-- configurable physical heater power;
-- RobotDyn `maxtemp` + `trigger` reading and matching hysteresis behavior;
-- Web V2 dashboard, 30-minute graph and diagnostics;
-- full `config.json` backup / restore;
-- enhanced TTGO display;
+It keeps:
+
+- **Zero Grid V14.3**;
+- Fronius **Solar API v1** as regulation source of truth;
+- RobotDyn HTTP + thermal safety;
+- Web V2 and MQTT/HA;
 - graphical boot screen;
-- differential TTGO rendering to reduce flicker;
-- separate and explicit firmware, control-algorithm and Fronius-API versions.
-
-## 35. Version summary
+- differential TTGO rendering and help page.
 
 ```text
-PV Router firmware       : V14.4
+PV Router firmware       : V14.6
 Zero Grid algorithm      : V14.3
 Fronius interface        : Solar API v1
 Tested RobotDyn firmware : Version 20260514
 ```
 
-This separation is intentional: the **PV Router firmware** version can change for Web UI or display improvements without changing the Zero Grid control algorithm or the Fronius API generation.
+This separation is intentional: Web UI, display or installation improvements can change the PV Router firmware version without changing the Zero Grid algorithm or the Fronius API generation.
