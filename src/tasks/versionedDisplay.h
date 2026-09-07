@@ -5,19 +5,32 @@
 
 #ifdef TTGO
 
-// Add the connected SSID after the Wi-Fi RSSI on the diagnostic page. The
-// RSSI keeps the normal colour coding while the SSID uses a smaller neutral
-// font so reasonably long network names still fit on the 240 px display.
+// Add the connected SSID after the Wi-Fi RSSI on the diagnostic page.
+// RSSI and SSID use the same font/size as the diagnostic "WiFi" label.
+// Keep the last non-empty SSID while connected because WiFi.SSID() can
+// transiently return an empty String during internal Wi-Fi housekeeping.
 static void drawVersionedDiagnosticWifi(bool forceRedraw)
 {
   static bool cacheValid = false;
   static bool lastConnected = false;
   static int lastRssi = -999;
   static String lastSsid;
+  static String stableSsid;
 
   const bool connected = WiFi.isConnected();
   const int rssi = connected ? WiFi.RSSI() : -127;
-  const String ssid = connected ? WiFi.SSID() : String("OFFLINE");
+
+  String ssid;
+  if (connected) {
+    const String liveSsid = WiFi.SSID();
+    if (liveSsid.length() > 0)
+      stableSsid = liveSsid;
+
+    ssid = stableSsid.length() > 0 ? stableSsid : String("WiFi");
+  }
+  else {
+    ssid = "OFFLINE";
+  }
 
   if (!forceRedraw && cacheValid &&
       connected == lastConnected &&
@@ -30,33 +43,37 @@ static void drawVersionedDiagnosticWifi(bool forceRedraw)
   if (rssi >= -60) wifiColor = TFT_GREEN;
   else if (rssi >= -75) wifiColor = TFT_YELLOW;
 
+  // One owner for the complete value area: clear and repaint RSSI + SSID
+  // together so one part of the row can never erase the other.
   display.fillRect(78, 22, 162, 16, TFT_BLACK);
-
   display.setTextSize(1);
   display.setTextFont(2);
-  display.setTextColor(wifiColor, TFT_BLACK);
+
   const String rssiText = String(rssi) + " dBm";
+  display.setTextColor(wifiColor, TFT_BLACK);
   display.setCursor(79, 22, 2);
   display.print(rssiText);
 
-  int ssidX = 79 + display.textWidth(rssiText, 2) + 6;
+  const int ssidX = 79 + display.textWidth(rssiText, 2) + 5;
   const int availableWidth = max(0, 239 - ssidX);
 
-  display.setTextFont(1);
-  display.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-
   String shownSsid = ssid;
-  while (shownSsid.length() > 0 &&
-         display.textWidth(shownSsid, 1) > availableWidth) {
-    shownSsid.remove(shownSsid.length() - 1);
+  if (display.textWidth(shownSsid, 2) > availableWidth) {
+    const String suffix = "..";
+    const int suffixWidth = display.textWidth(suffix, 2);
+
+    while (shownSsid.length() > 0 &&
+           display.textWidth(shownSsid, 2) + suffixWidth > availableWidth) {
+      shownSsid.remove(shownSsid.length() - 1);
+    }
+
+    if (shownSsid.length() > 0)
+      shownSsid += suffix;
   }
 
-  if (shownSsid.length() < ssid.length() && shownSsid.length() > 2) {
-    shownSsid.remove(shownSsid.length() - 2);
-    shownSsid += "..";
-  }
-
-  display.setCursor(ssidX, 25, 1);
+  // Same visual weight as the "WiFi" label on the left.
+  display.setTextColor(TFT_WHITE, TFT_BLACK);
+  display.setCursor(ssidX, 22, 2);
   display.print(shownSsid);
 
   cacheValid = true;
@@ -111,9 +128,7 @@ void updateDisplaySmoothV144(void * parameter)
       }
       else if (page == 2) {
         // Help is a static page: draw it once when entering the page and then
-        // leave it untouched. Previously page 2 fell through to diagnostics,
-        // which immediately overwrote the help screen and made it appear only
-        // as a brief flash.
+        // leave it untouched.
         if (fullRedraw)
           drawTTGOHelpPage();
       }
