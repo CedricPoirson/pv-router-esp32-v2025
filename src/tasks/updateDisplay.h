@@ -459,7 +459,7 @@ static void drawTTGOZeroGridDashboard()
   }
 
   const int bannerY = 20;
-  const int bannerH = 44;
+  const int bannerH = 47;
   display.fillRect(0, bannerY, 240, bannerH, bannerBg);
 
   // Make DISPO more prominent without stealing space from the main kW value.
@@ -487,7 +487,7 @@ static void drawTTGOZeroGridDashboard()
   const int bannerValueWidth = display.textWidth(bannerValue, 4) + 1;
   int bannerValueX = (240 - bannerValueWidth) / 2;
   if (bannerValueX < 0) bannerValueX = 0;
-  const int bannerValueY = bannerY + 17;
+  const int bannerValueY = bannerY + 18;
   display.setCursor(bannerValueX, bannerValueY, 4);
   display.print(bannerValue);
   display.setTextColor(bannerFg);
