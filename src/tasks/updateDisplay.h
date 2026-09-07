@@ -96,6 +96,26 @@ static void drawThermometerIcon(int x, int y, int color)
   display.fillCircle(x + 4, y + 13, 2, color);
 }
 
+// Visual ECS temperature bands. This is display-only and has no effect on the
+// actual temperature safety logic in gettemp.h.
+// <30 C = cold, 30..50 C = warming, 50 C..Tmax = useful/hot, >=Tmax = limit.
+static int waterTemperatureColorTTGO(float waterTemp, int effectiveMaxTemp)
+{
+  if (waterTemp <= 0.0f)
+    return TFT_DARKGREY;
+
+  if (effectiveMaxTemp > 0 && waterTemp >= (float)effectiveMaxTemp)
+    return TFT_RED;
+
+  if (waterTemp < 30.0f)
+    return TFT_CYAN;
+
+  if (waterTemp < 50.0f)
+    return TFT_ORANGE;
+
+  return TFT_GREEN;
+}
+
 static void drawCheckIcon(int x, int y, int color)
 {
   display.drawCircle(x + 6, y + 6, 6, color);
@@ -321,9 +341,9 @@ static void drawTTGOZeroGridDashboard()
   if (clockText.length() >= 5) clockText = clockText.substring(0, 5);
   display.print(clockText);
 
-  const int tempColor = tempAtOrAboveMax ? TFT_ORANGE : TFT_CYAN;
+  const int tempColor = waterTemperatureColorTTGO(waterTemp, effectiveMaxTemp);
   drawThermometerIcon(59, 1, tempColor);
-  display.setTextColor(tempAtOrAboveMax ? TFT_ORANGE : TFT_WHITE, TFT_BLACK);
+  display.setTextColor(tempColor, TFT_BLACK);
   String tempText = waterTemp > 0.0f ? String(waterTemp, 1) : "--.-";
   tempText += "/";
   tempText += effectiveMaxTemp > 0 ? String(effectiveMaxTemp) : "--";
@@ -551,11 +571,7 @@ static void drawTTGODiagnosticPage()
   temperatureText +=
       effectiveMaxTemp > 0 ? String(effectiveMaxTemp) + "C" : "--C";
   const int tempColor =
-      (waterTemp > 0.0f &&
-       effectiveMaxTemp > 0 &&
-       waterTemp >= effectiveMaxTemp)
-          ? TFT_ORANGE
-          : TFT_WHITE;
+      waterTemperatureColorTTGO(waterTemp, effectiveMaxTemp);
   drawDiagnosticRowTTGO("Eau/Tmax", temperatureText, 102, tempColor);
   drawDiagnosticRowTTGO("Uptime", formatUptimeTTGO(now), 118, TFT_WHITE);
 }
