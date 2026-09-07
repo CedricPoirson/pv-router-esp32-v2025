@@ -343,13 +343,20 @@ static void drawTTGOZeroGridDashboard()
 
   const int tempColor = waterTemperatureColorTTGO(waterTemp, effectiveMaxTemp);
   drawThermometerIcon(59, 1, tempColor);
+  const String tempCurrentText =
+      waterTemp > 0.0f ? String(waterTemp, 1) : "--.-";
+  String tempMaxText = "/";
+  tempMaxText += effectiveMaxTemp > 0 ? String(effectiveMaxTemp) : "--";
+  tempMaxText += "C";
+
   display.setTextColor(tempColor, TFT_BLACK);
-  String tempText = waterTemp > 0.0f ? String(waterTemp, 1) : "--.-";
-  tempText += "/";
-  tempText += effectiveMaxTemp > 0 ? String(effectiveMaxTemp) : "--";
-  tempText += "C";
   display.setCursor(73, 2, 2);
-  display.print(tempText);
+  display.print(tempCurrentText);
+
+  const int tempMaxX = 73 + display.textWidth(tempCurrentText, 2);
+  display.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  display.setCursor(tempMaxX, 2, 2);
+  display.print(tempMaxText);
 
   const int ceIconX = 158;
   const int ceTextX = 174;
@@ -380,7 +387,7 @@ static void drawTTGOZeroGridDashboard()
   }
   else {
     drawCheckIcon(ceIconX, 2, TFT_GREEN);
-    display.setTextColor(TFT_GREEN, TFT_BLACK);
+    display.setTextColor(TFT_WHITE, TFT_BLACK);
     display.setCursor(ceTextX, 2, 2);
     display.print("CE OK");
   }
@@ -438,16 +445,28 @@ static void drawTTGOZeroGridDashboard()
 
   display.setTextSize(1);
   display.setTextFont(2);
-  display.setTextColor(bannerFg, bannerBg);
+  const int bannerLabelColor =
+      (bannerBg == TFT_GREEN || bannerBg == TFT_ORANGE || bannerBg == TFT_CYAN)
+          ? TFT_DARKGREY
+          : TFT_LIGHTGREY;
+  display.setTextColor(bannerLabelColor, bannerBg);
   int bannerLabelX = (240 - display.textWidth(bannerLabel, 2)) / 2;
   if (bannerLabelX < 0) bannerLabelX = 0;
   display.setCursor(bannerLabelX, bannerY + 2, 2);
   display.print(bannerLabel);
 
+  // Keep the large font that already fits every W/kW value, but render a
+  // second transparent 1 px pass to give the available-power value a slightly
+  // bolder, more prominent appearance without upsetting the layout.
   display.setTextFont(4);
-  int bannerValueX = (240 - display.textWidth(bannerValue, 4)) / 2;
+  display.setTextColor(bannerFg, bannerBg);
+  const int bannerValueWidth = display.textWidth(bannerValue, 4) + 1;
+  int bannerValueX = (240 - bannerValueWidth) / 2;
   if (bannerValueX < 0) bannerValueX = 0;
   display.setCursor(bannerValueX, bannerY + 16, 4);
+  display.print(bannerValue);
+  display.setTextColor(bannerFg);
+  display.setCursor(bannerValueX + 1, bannerY + 16, 4);
   display.print(bannerValue);
 
   display.setTextSize(1);
