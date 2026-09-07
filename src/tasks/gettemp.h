@@ -54,6 +54,7 @@ void GetDImmerTemp(void * parameter){
             ecsTemp = doc["temperature"].as<String>();
           }
           gDisplayValues.temperature = ecsTemp;
+          gDisplayValues.dimmerMaxTemp = doc["boost_max_temp"] | 0;
 
           gDisplayValues.dimmerPower = doc["power"] | 0.0f;
           gDisplayValues.dimmerPtotal = doc["Ptotal"] | 0.0f;
@@ -110,6 +111,7 @@ void GetDImmerTemp(void * parameter){
 
     if (!currentLinkOk) {
       gDisplayValues.temperature = "";
+      gDisplayValues.dimmerMaxTemp = 0;
     }
 
     if (!currentLinkOk && (!linkStateKnown || previousLinkOk)) {
