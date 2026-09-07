@@ -9,6 +9,7 @@
 #include <WiFi.h>
 #include "appweb.h"
 #include "froniusZeroGrid.h"
+#include "config/version.h"
 
 extern DisplayValues gDisplayValues;
 extern PubSubClient client;
@@ -80,8 +81,11 @@ static String buildApiStatus()
   else
     status = "ZERO GRID";
 
-  StaticJsonDocument<2560> doc;
-  doc["version"] = String(VERSION);
+  StaticJsonDocument<2816> doc;
+  doc["version"] = PV_ROUTER_FIRMWARE_LABEL;
+  doc["firmware_version"] = PV_ROUTER_FIRMWARE_LABEL;
+  doc["fronius_api"] = PV_ROUTER_FRONIUS_API_VERSION;
+  doc["fronius_powerflow_path"] = PV_ROUTER_FRONIUS_POWERFLOW_PATH;
   doc["uptime_s"] = now / 1000UL;
   doc["ip"] = gDisplayValues.IP;
   doc["wifi_rssi"] = WiFi.isConnected() ? WiFi.RSSI() : -127;
@@ -103,7 +107,7 @@ static String buildApiStatus()
     doc["fronius_age_ms"] = nullptr;
 
   JsonObject regulation = doc.createNestedObject("regulation");
-  regulation["version"] = "V14.3";
+  regulation["version"] = PV_ROUTER_ZERO_GRID_LABEL;
   regulation["target_w"] = gridTargetW;
   regulation["low_w"] = gridTargetW - gridDeadbandW;
   regulation["high_w"] = gridTargetW + gridDeadbandW;
