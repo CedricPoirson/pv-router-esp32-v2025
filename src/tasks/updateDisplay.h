@@ -462,26 +462,36 @@ static void drawTTGOZeroGridDashboard()
   const int bannerH = 44;
   display.fillRect(0, bannerY, 240, bannerH, bannerBg);
 
-  display.setTextSize(1);
-  display.setTextFont(2);
+  // Make DISPO more prominent without stealing space from the main kW value.
+  // Font 1 at x2 is slightly wider/bolder than font 2 while keeping a similar
+  // height. Other banner states keep their existing compact label style.
+  const bool largeDispoLabel = (bannerLabel == "DISPO");
+  const int bannerLabelFont = largeDispoLabel ? 1 : 2;
+  const int bannerLabelSize = largeDispoLabel ? 2 : 1;
+  const int bannerLabelY = largeDispoLabel ? bannerY + 1 : bannerY + 2;
+  display.setTextSize(bannerLabelSize);
+  display.setTextFont(bannerLabelFont);
   display.setTextColor(bannerFg, bannerBg);
-  int bannerLabelX = (240 - display.textWidth(bannerLabel, 2)) / 2;
+  int bannerLabelX =
+      (240 - display.textWidth(bannerLabel, bannerLabelFont)) / 2;
   if (bannerLabelX < 0) bannerLabelX = 0;
-  display.setCursor(bannerLabelX, bannerY + 2, 2);
+  display.setCursor(bannerLabelX, bannerLabelY, bannerLabelFont);
   display.print(bannerLabel);
 
   // Keep the large font that already fits every W/kW value, but render a
   // second transparent 1 px pass to give the available-power value a slightly
   // bolder, more prominent appearance without upsetting the layout.
+  display.setTextSize(1);
   display.setTextFont(4);
   display.setTextColor(bannerFg, bannerBg);
   const int bannerValueWidth = display.textWidth(bannerValue, 4) + 1;
   int bannerValueX = (240 - bannerValueWidth) / 2;
   if (bannerValueX < 0) bannerValueX = 0;
-  display.setCursor(bannerValueX, bannerY + 16, 4);
+  const int bannerValueY = bannerY + 17;
+  display.setCursor(bannerValueX, bannerValueY, 4);
   display.print(bannerValue);
   display.setTextColor(bannerFg);
-  display.setCursor(bannerValueX + 1, bannerY + 16, 4);
+  display.setCursor(bannerValueX + 1, bannerValueY, 4);
   display.print(bannerValue);
 
   display.setTextSize(1);
@@ -529,12 +539,9 @@ static void drawTTGOZeroGridDashboard()
     display.setTextColor(TFT_YELLOW, TFT_BLACK);
     display.print("START");
   }
-  else if (dimmerFresh && !dimmerSynced) {
-    display.setCursor(145, 91, 2);
-    display.setTextColor(TFT_YELLOW, TFT_BLACK);
-    display.print("SYNC");
-  }
   else if (gDisplayValues.froniusup) {
+    // CE SYNC is already shown in the top status area. Keep the lower-right
+    // area useful by continuing to show house consumption during sync.
     drawHouseIcon(133, 90, TFT_WHITE);
     display.setCursor(151, 91, 2);
     display.setTextColor(TFT_WHITE, TFT_BLACK);
