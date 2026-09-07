@@ -18,7 +18,6 @@
 #define FRONIUS_GRID_TARGET_W -10
 #define FRONIUS_GRID_DEADBAND_W 10
 
-#define DIMMER_IP "192.168.100.29"
 #define DIMMER_MIN_CHANGE 1
 #define DIMMER_HTTP_TIMEOUT_MS 500UL
 #define DIMMER_REFRESH_MS 60000UL
@@ -32,6 +31,7 @@
 #define FRONIUS_STALE_MS 4000UL
 
 extern DisplayValues gDisplayValues;
+extern Config config;
 
 static int lastSentDimmer = -1;
 static unsigned long lastDimmerSendMs = 0;
@@ -55,7 +55,8 @@ bool sendDimmerPower(int power)
         return false;
 
     HTTPClient http;
-    const String url = String("http://") + DIMMER_IP + "/?POWER=" + String(power);
+    const String url = String("http://") + String(config.dimmer) +
+                       "/?POWER=" + String(power);
 
     http.setConnectTimeout(DIMMER_HTTP_TIMEOUT_MS);
     http.setTimeout(DIMMER_HTTP_TIMEOUT_MS);
