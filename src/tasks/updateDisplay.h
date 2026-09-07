@@ -25,6 +25,7 @@ extern DisplayValues gDisplayValues;
 // switchDisplay.h changes these values after a button press.
 volatile uint8_t gDisplayPage = 0;
 volatile bool gDisplayForceRefresh = true;
+volatile bool gDisplayBootComplete = false;
 
 // Display-only startup window: distinguish a dimmer that has just been
 // commanded ON from a persistent command/actual mismatch.
@@ -68,6 +69,56 @@ static void drawCenteredTTGO(const String &text, int y, int font, int color)
   if (x < 0) x = 0;
   display.setCursor(x, y, font);
   display.print(text);
+}
+
+// Compact vector boot screen: no bitmap or SPIFFS asset required, so it is
+// available immediately after TFT initialisation and also during uploadfs.
+static void drawTTGOBootScreen(const String &stage,
+                               const String &detail,
+                               uint8_t progress)
+{
+  if (progress > 100) progress = 100;
+
+  display.fillScreen(TFT_BLACK);
+  display.setTextSize(1);
+
+  // PV badge.
+  display.fillRoundRect(9, 8, 43, 43, 10, TFT_GREEN);
+  display.drawRoundRect(9, 8, 43, 43, 10, TFT_CYAN);
+  display.setTextFont(4);
+  display.setTextColor(TFT_BLACK, TFT_GREEN);
+  display.setCursor(15, 17, 4);
+  display.print("PV");
+
+  display.setTextFont(4);
+  display.setTextColor(TFT_WHITE, TFT_BLACK);
+  display.setCursor(63, 8, 4);
+  display.print("PV ROUTER");
+
+  display.setTextFont(2);
+  display.setTextColor(TFT_CYAN, TFT_BLACK);
+  display.setCursor(64, 38, 2);
+  display.print("ZERO GRID V14.3");
+
+  display.drawFastHLine(10, 61, 220, TFT_DARKGREY);
+  drawCenteredTTGO(stage, 70, 2, TFT_WHITE);
+  drawCenteredTTGO(detail, 90, 1, TFT_LIGHTGREY);
+
+  const int barX = 14;
+  const int barY = 112;
+  const int barW = 212;
+  const int barH = 9;
+  display.drawRoundRect(barX, barY, barW, barH, 4, TFT_DARKGREY);
+  const int fillW = ((barW - 4) * progress) / 100;
+  if (fillW > 0)
+    display.fillRoundRect(barX + 2, barY + 2, fillW, barH - 4, 2,
+                          progress >= 100 ? TFT_GREEN : TFT_CYAN);
+
+  display.setTextFont(1);
+  display.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  const String pct = String(progress) + "%";
+  display.setCursor((240 - display.textWidth(pct, 1)) / 2, 125, 1);
+  display.print(pct);
 }
 
 static void drawDiagnosticRowTTGO(const String &label,
@@ -235,8 +286,8 @@ static void drawPowerGaugeTTGO(int watts, bool valid)
 
   display.drawRect(x, y, width, height, TFT_WHITE);
 
-  // Zero remains visible but deliberately subdued so the moving cursor wins.
-  display.drawFastVLine(xZero, y - 2, height + 4, TFT_DARKGREY);
+  // Make the 0 W frontier easy to spot while leaving the moving cursor dominant.
+  display.fillRect(xZero - 1, y - 2, 2, height + 4, TFT_LIGHTGREY);
 
   if (valid) {
     const int markerX = gaugeXForPowerTTGO(watts);
@@ -312,12 +363,11 @@ static void drawTTGOZeroGridDashboard()
       (waterTemp > 0.0f) &&
       (effectiveMaxTemp > 0) &&
       (waterTemp >= (float)effectiveMaxTemp);
+  const bool heaterTempHold =
+      dimmerFresh && gDisplayValues.dimmerTempLimitActive;
 
-  // Display TEMP MAX as soon as the measured water reaches the active ECS
-  // setpoint. Do not require a non-zero command: at the limit the safety task
-  // may already have forced the dimmer command itself back to 0%.
-  const bool heaterAtTempLimit =
-      dimmerFresh && tempAtOrAboveMax;
+  // The top status distinguishes the actual threshold from the hysteresis hold.
+  const bool heaterAtTempLimit = heaterTempHold && tempAtOrAboveMax;
 
   const bool dimmerSynced =
       dimmerFresh &&
@@ -326,7 +376,7 @@ static void drawTTGOZeroGridDashboard()
   // A fresh positive command with an almost-zero actual output is a normal
   // startup for a short time. Do not keep resetting this timer when the Zero
   // Grid command changes while the dimmer is still starting.
-  if (dimmerFresh && commandedDimmer > 0 && reportedDimmer < 5) {
+  if (dimmerFresh && commandedDimmer > 0 && reportedDimmer < 5 && !heaterTempHold) {
     if (gDimmerStartSinceMs == 0)
       gDimmerStartSinceMs = now;
   }
@@ -394,6 +444,12 @@ static void drawTTGOZeroGridDashboard()
     display.setCursor(ceTextX, 2, 2);
     display.print("TEMP MAX");
   }
+  else if (heaterTempHold) {
+    drawClockIcon(ceIconX, 2, TFT_ORANGE);
+    display.setTextColor(TFT_ORANGE, TFT_BLACK);
+    display.setCursor(ceTextX, 2, 2);
+    display.print("TEMP HOLD");
+  }
   else if (dimmerStarting) {
     drawClockIcon(ceIconX, 2, TFT_YELLOW);
     display.setTextColor(TFT_YELLOW, TFT_BLACK);
@@ -414,8 +470,8 @@ static void drawTTGOZeroGridDashboard()
   }
 
   // Full-width, high-contrast power banner for easy reading from a distance.
-  // Red = grid import, cyan = near-zero, orange = 0..2 kW available,
-  // green = >2 kW available. The 2 kW boundary uses a 100 W hysteresis.
+  // Red = grid import, cyan = near-zero, orange = 0..2 kW available/surplus,
+  // green = >2 kW. The 2 kW boundary uses a 100 W hysteresis.
   if (gDisplayValues.froniusup && !importing) {
     if (gHighSurplusBand) {
       if (availablePower < 1950) gHighSurplusBand = false;
@@ -446,17 +502,17 @@ static void drawTTGOZeroGridDashboard()
       bannerLabel = "ZERO GRID";
       bannerValue = formatPowerTTGO(availablePower);
     }
-    else if (gHighSurplusBand) {
-      bannerBg = TFT_GREEN;
-      bannerFg = TFT_BLACK;
-      bannerLabel = "DISPO";
-      bannerValue = formatPowerTTGO(availablePower);
-    }
     else {
-      bannerBg = TFT_ORANGE;
+      bannerBg = gHighSurplusBand ? TFT_GREEN : TFT_ORANGE;
       bannerFg = TFT_BLACK;
-      bannerLabel = "DISPO";
-      bannerValue = formatPowerTTGO(availablePower);
+      if (heaterTempHold && exporting) {
+        bannerLabel = "SURPLUS";
+        bannerValue = formatPowerTTGO(-grid);
+      }
+      else {
+        bannerLabel = "DISPO";
+        bannerValue = formatPowerTTGO(availablePower);
+      }
     }
   }
 
@@ -464,13 +520,13 @@ static void drawTTGOZeroGridDashboard()
   const int bannerH = 47;
   display.fillRect(0, bannerY, 240, bannerH, bannerBg);
 
-  // Make DISPO more prominent without stealing space from the main kW value.
-  // Font 1 at x2 is slightly wider/bolder than font 2 while keeping a similar
-  // height. Other banner states keep their existing compact label style.
-  const bool largeDispoLabel = (bannerLabel == "DISPO");
-  const int bannerLabelFont = largeDispoLabel ? 1 : 2;
-  const int bannerLabelSize = largeDispoLabel ? 2 : 1;
-  const int bannerLabelY = largeDispoLabel ? bannerY + 1 : bannerY + 2;
+  // Make DISPO/SURPLUS more prominent without stealing space from the main kW
+  // value. Other banner states keep their existing compact label style.
+  const bool largeBannerLabel =
+      (bannerLabel == "DISPO" || bannerLabel == "SURPLUS");
+  const int bannerLabelFont = largeBannerLabel ? 1 : 2;
+  const int bannerLabelSize = largeBannerLabel ? 2 : 1;
+  const int bannerLabelY = largeBannerLabel ? bannerY + 1 : bannerY + 2;
   display.setTextSize(bannerLabelSize);
   display.setTextFont(bannerLabelFont);
   display.setTextColor(bannerFg, bannerBg);
@@ -481,8 +537,8 @@ static void drawTTGOZeroGridDashboard()
   display.print(bannerLabel);
 
   // Keep the large font that already fits every W/kW value, but render a
-  // second transparent 1 px pass to give the available-power value a slightly
-  // bolder, more prominent appearance without upsetting the layout.
+  // second transparent 1 px pass to give the power value a slightly bolder,
+  // more prominent appearance without upsetting the layout.
   display.setTextSize(1);
   display.setTextFont(4);
   display.setTextColor(bannerFg, bannerBg);
@@ -531,10 +587,19 @@ static void drawTTGOZeroGridDashboard()
   display.setCursor(87, 91, 2);
   display.printf("%dW", heaterPower);
 
-  if (heaterAtTempLimit) {
-    display.setCursor(133, 91, 2);
+  if (heaterTempHold) {
     display.setTextColor(TFT_ORANGE, TFT_BLACK);
-    display.print("TEMP MAX");
+    display.setCursor(129, 91, 2);
+    display.print("REPRISE ");
+    const String releaseText =
+        gDisplayValues.dimmerReleaseTemp > 0.0f
+            ? String(gDisplayValues.dimmerReleaseTemp, 0)
+            : "--";
+    display.print(releaseText);
+    const int releaseDegreeX =
+        129 + display.textWidth("REPRISE ", 2) +
+        display.textWidth(releaseText, 2) + 1;
+    drawDegreeCUnitTTGO(releaseDegreeX, 91, 2, TFT_ORANGE, TFT_BLACK);
   }
   else if (dimmerStarting) {
     display.setCursor(145, 91, 2);
@@ -650,6 +715,11 @@ void updateDisplay(void * parameter){
 
   for (;;){
 #ifdef TTGO
+    if (!gDisplayBootComplete) {
+      vTaskDelay(100 / portTICK_PERIOD_MS);
+      continue;
+    }
+
     const unsigned long now = millis();
     if (gDisplayForceRefresh ||
         (unsigned long)(now - lastDrawMs) >= 2000UL) {
