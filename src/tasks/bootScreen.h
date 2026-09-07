@@ -2,6 +2,7 @@
 #define TTGO_BOOT_SCREEN
 
 #include <Arduino.h>
+#include "../config/version.h"
 
 #ifdef TTGO
 #include <TFT_eSPI.h>
@@ -77,7 +78,8 @@ static void drawTTGOGraphicalBootScreen(const String &stage,
   display.setTextFont(1);
   display.setTextColor(TFT_CYAN, TFT_BLACK);
   display.setCursor(50, 28, 1);
-  display.print("ZERO GRID V14.3");
+  display.print(String("FW ") + PV_ROUTER_FIRMWARE_LABEL +
+                " | ZERO GRID " + PV_ROUTER_ZERO_GRID_LABEL);
 
   // Energy-flow illustration: sun -> home -> hot-water -> grid.
   const int flowY = 60;
