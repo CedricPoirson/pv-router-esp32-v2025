@@ -14,6 +14,7 @@
 #include <ArduinoJson.h> // ArduinoJson : https://github.com/bblanchon/ArduinoJson
 
 #include "tasks/updateDisplay.h"
+#include "tasks/smoothDisplay.h"
 #include "tasks/bootScreen.h"
 #include "tasks/switchDisplay.h"
 #include "tasks/fetch-time-from-ntp.h"
@@ -189,7 +190,7 @@ void setup()
   // TASK: Update the display every second.
   #if OLED_ON == true
     xTaskCreatePinnedToCore(
-      updateDisplay,
+      updateDisplaySmooth,
       "UpdateDisplay",
       10000,
       NULL,
