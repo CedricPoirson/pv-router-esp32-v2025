@@ -41,6 +41,7 @@ struct DisplayValues {
   unsigned long dimmerLastOkMs;
   bool dimmerOn;
   bool dimmerAlarm;
+  bool dimmerTempLimitActive;
   float dimmerPower;
   float dimmerPtotal;
   int dimmerRssi;
