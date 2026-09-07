@@ -30,6 +30,10 @@ volatile bool gDisplayForceRefresh = true;
 // commanded ON from a persistent command/actual mismatch.
 static unsigned long gDimmerStartSinceMs = 0;
 
+// Display-only hysteresis around the 2 kW surplus colour threshold so the
+// full-width banner does not flicker when available power hovers near 2 kW.
+static bool gHighSurplusBand = false;
+
 static String formatPowerTTGO(int watts)
 {
   if (watts < 0) watts = -watts;
@@ -361,32 +365,72 @@ static void drawTTGOZeroGridDashboard()
     display.print("CE OK");
   }
 
-  drawCenteredTTGO(importing ? "IMPORT" : "DISPO",
-                   20,
-                   2,
-                   importing ? TFT_RED : TFT_WHITE);
-
-  int mainColor = TFT_RED;
-  if (!importing) {
-    if (availablePower >= 2000) mainColor = TFT_GREEN;
-    else if (availablePower >= 500) mainColor = TFT_YELLOW;
+  // Full-width, high-contrast power banner for easy reading from a distance.
+  // Red = grid import, cyan = near-zero, orange = 0..2 kW available,
+  // green = >2 kW available. The 2 kW boundary uses a 100 W hysteresis.
+  if (gDisplayValues.froniusup && !importing) {
+    if (gHighSurplusBand) {
+      if (availablePower < 1950) gHighSurplusBand = false;
+    }
+    else if (availablePower >= 2050) {
+      gHighSurplusBand = true;
+    }
+  }
+  else {
+    gHighSurplusBand = false;
   }
 
-  String mainText = "---";
+  int bannerBg = TFT_DARKGREY;
+  int bannerFg = TFT_WHITE;
+  String bannerLabel = "FRONIUS";
+  String bannerValue = "---";
+
   if (gDisplayValues.froniusup) {
-    mainText = importing ? formatPowerTTGO(grid)
-                         : formatPowerTTGO(availablePower);
+    if (importing) {
+      bannerBg = TFT_RED;
+      bannerFg = TFT_WHITE;
+      bannerLabel = "IMPORT";
+      bannerValue = formatPowerTTGO(grid);
+    }
+    else if (availablePower <= gridDisplayNeutralW) {
+      bannerBg = TFT_CYAN;
+      bannerFg = TFT_BLACK;
+      bannerLabel = "ZERO GRID";
+      bannerValue = formatPowerTTGO(availablePower);
+    }
+    else if (gHighSurplusBand) {
+      bannerBg = TFT_GREEN;
+      bannerFg = TFT_BLACK;
+      bannerLabel = "DISPO";
+      bannerValue = formatPowerTTGO(availablePower);
+    }
+    else {
+      bannerBg = TFT_ORANGE;
+      bannerFg = TFT_BLACK;
+      bannerLabel = "DISPO";
+      bannerValue = formatPowerTTGO(availablePower);
+    }
   }
 
-  display.setTextFont(2);
-  display.setTextSize(2);
-  display.setTextColor(mainColor, TFT_BLACK);
-  int mainX = (240 - display.textWidth(mainText, 2)) / 2;
-  if (mainX < 0) mainX = 0;
-  display.setCursor(mainX, 36, 2);
-  display.print(mainText);
-  display.setTextSize(1);
+  const int bannerY = 20;
+  const int bannerH = 44;
+  display.fillRect(0, bannerY, 240, bannerH, bannerBg);
 
+  display.setTextSize(1);
+  display.setTextFont(2);
+  display.setTextColor(bannerFg, bannerBg);
+  int bannerLabelX = (240 - display.textWidth(bannerLabel, 2)) / 2;
+  if (bannerLabelX < 0) bannerLabelX = 0;
+  display.setCursor(bannerLabelX, bannerY + 2, 2);
+  display.print(bannerLabel);
+
+  display.setTextFont(4);
+  int bannerValueX = (240 - display.textWidth(bannerValue, 4)) / 2;
+  if (bannerValueX < 0) bannerValueX = 0;
+  display.setCursor(bannerValueX, bannerY + 16, 4);
+  display.print(bannerValue);
+
+  display.setTextSize(1);
   display.setTextFont(2);
   drawSunIcon(2, 69, TFT_YELLOW);
   display.setTextColor(TFT_GREEN, TFT_BLACK);
