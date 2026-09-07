@@ -445,11 +445,7 @@ static void drawTTGOZeroGridDashboard()
 
   display.setTextSize(1);
   display.setTextFont(2);
-  const int bannerLabelColor =
-      (bannerBg == TFT_GREEN || bannerBg == TFT_ORANGE || bannerBg == TFT_CYAN)
-          ? TFT_DARKGREY
-          : TFT_LIGHTGREY;
-  display.setTextColor(bannerLabelColor, bannerBg);
+  display.setTextColor(bannerFg, bannerBg);
   int bannerLabelX = (240 - display.textWidth(bannerLabel, 2)) / 2;
   if (bannerLabelX < 0) bannerLabelX = 0;
   display.setCursor(bannerLabelX, bannerY + 2, 2);
