@@ -5,6 +5,66 @@
 
 #ifdef TTGO
 
+// Add the connected SSID after the Wi-Fi RSSI on the diagnostic page. The
+// RSSI keeps the normal colour coding while the SSID uses a smaller neutral
+// font so reasonably long network names still fit on the 240 px display.
+static void drawVersionedDiagnosticWifi(bool forceRedraw)
+{
+  static bool cacheValid = false;
+  static bool lastConnected = false;
+  static int lastRssi = -999;
+  static String lastSsid;
+
+  const bool connected = WiFi.isConnected();
+  const int rssi = connected ? WiFi.RSSI() : -127;
+  const String ssid = connected ? WiFi.SSID() : String("OFFLINE");
+
+  if (!forceRedraw && cacheValid &&
+      connected == lastConnected &&
+      rssi == lastRssi &&
+      ssid == lastSsid) {
+    return;
+  }
+
+  int wifiColor = TFT_RED;
+  if (rssi >= -60) wifiColor = TFT_GREEN;
+  else if (rssi >= -75) wifiColor = TFT_YELLOW;
+
+  display.fillRect(78, 22, 162, 16, TFT_BLACK);
+
+  display.setTextSize(1);
+  display.setTextFont(2);
+  display.setTextColor(wifiColor, TFT_BLACK);
+  const String rssiText = String(rssi) + " dBm";
+  display.setCursor(79, 22, 2);
+  display.print(rssiText);
+
+  int ssidX = 79 + display.textWidth(rssiText, 2) + 6;
+  const int availableWidth = max(0, 239 - ssidX);
+
+  display.setTextFont(1);
+  display.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+
+  String shownSsid = ssid;
+  while (shownSsid.length() > 0 &&
+         display.textWidth(shownSsid, 1) > availableWidth) {
+    shownSsid.remove(shownSsid.length() - 1);
+  }
+
+  if (shownSsid.length() < ssid.length() && shownSsid.length() > 2) {
+    shownSsid.remove(shownSsid.length() - 2);
+    shownSsid += "..";
+  }
+
+  display.setCursor(ssidX, 25, 1);
+  display.print(shownSsid);
+
+  cacheValid = true;
+  lastConnected = connected;
+  lastRssi = rssi;
+  lastSsid = ssid;
+}
+
 // Versioned display scheduler. A forced refresh means "draw now", not "blank
 // the whole TFT". Full-screen clears are reserved for real page transitions.
 // This keeps the differential renderer effective even though gettemp.h asks
@@ -38,6 +98,7 @@ void updateDisplaySmoothV144(void * parameter)
       }
       else if (page == 1) {
         drawTTGOSmoothDiagnostic(fullRedraw);
+        drawVersionedDiagnosticWifi(fullRedraw);
 
         // Replace the historical diagnostic title with the actual firmware
         // version. The regulation version remains separate.
