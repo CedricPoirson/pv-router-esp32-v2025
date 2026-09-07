@@ -295,7 +295,9 @@ static void drawTTGOZeroGridDashboard()
   if (commandedDimmer < 0) commandedDimmer = 0;
   if (commandedDimmer > 100) commandedDimmer = 100;
 
-  const int heaterPower = (800 * reportedDimmer) / 100;
+  const int configuredHeaterPowerW =
+      constrain(config.heaterPowerW > 0 ? config.heaterPowerW : 800, 100, 5000);
+  const int heaterPower = (configuredHeaterPowerW * reportedDimmer) / 100;
   const int grid = (int)gDisplayValues.grid;
   const float waterTemp = gDisplayValues.temperature.toFloat();
   const int effectiveMaxTemp =
