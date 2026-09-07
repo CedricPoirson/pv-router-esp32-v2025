@@ -169,15 +169,20 @@ void Mqtt_publishState()
       gDisplayValues.dimmerLastOkMs > 0 &&
       ((unsigned long)(now - gDisplayValues.dimmerLastOkMs) <= 15000UL);
 
+  const int configuredHeaterPowerW =
+      constrain(config.heaterPowerW > 0 ? config.heaterPowerW : 800, 100, 5000);
+  const int configuredMaxDimmer =
+      constrain(config.dimmerMaxPercent > 0 ? config.dimmerMaxPercent : 100, 10, 100);
+
   int dimmerCmd = gDisplayValues.dimmer;
   if (dimmerCmd < 0) dimmerCmd = 0;
-  if (dimmerCmd > 100) dimmerCmd = 100;
+  if (dimmerCmd > configuredMaxDimmer) dimmerCmd = configuredMaxDimmer;
 
   int dimmerActual = dimmerOnline ? gDisplayValues.dimmerReported : 0;
   if (dimmerActual < 0) dimmerActual = 0;
   if (dimmerActual > 100) dimmerActual = 100;
 
-  const int heaterPower = (800 * dimmerActual) / 100;
+  const int heaterPower = (configuredHeaterPowerW * dimmerActual) / 100;
   const int gridPower = (int)gDisplayValues.grid;
   const int pvPower = (int)gDisplayValues.production;
 
@@ -213,7 +218,7 @@ void Mqtt_publishState()
   else if (!dimmerSynced) {
     status = "CE SYNC";
   }
-  else if (dimmerCmd >= 100 && gridPower < -20) {
+  else if (dimmerCmd >= configuredMaxDimmer && gridPower < -20) {
     status = "LOAD LIMITED";
   }
   else if (gridPower > 20) {
@@ -229,13 +234,15 @@ void Mqtt_publishState()
   const int wifiRssi = WiFi.isConnected() ? WiFi.RSSI() : -127;
 
   String payload;
-  payload.reserve(460);
+  payload.reserve(500);
   payload = "{";
   payload += "\"pv_w\":" + String(pvPower) + ",";
   payload += "\"grid_w\":" + String(gridPower) + ",";
   payload += "\"house_w\":" + String(housePower) + ",";
   payload += "\"available_w\":" + String(availablePower) + ",";
   payload += "\"heater_w\":" + String(heaterPower) + ",";
+  payload += "\"heater_model_w\":" + String(configuredHeaterPowerW) + ",";
+  payload += "\"dimmer_max\":" + String(configuredMaxDimmer) + ",";
   payload += "\"dimmer_cmd\":" + String(dimmerCmd) + ",";
   payload += "\"dimmer_actual\":" + String(dimmerActual) + ",";
   payload += "\"water_temp\":";
