@@ -1,308 +1,211 @@
 # PV Router ESP32 / TTGO T-Display — Fronius Zero Grid + RobotDyn
 
-Routeur de surplus photovoltaïque basé sur **ESP32 / TTGO T-Display**.
+Routeur de surplus photovoltaïque pour **ESP32 / TTGO T-Display**, basé sur la mesure temps réel d'un **Fronius + Smart Meter** et le pilotage HTTP d'un **dimmer Wi-Fi RobotDyn** alimentant un chauffe-eau résistif.
 
-La version actuelle du projet récupère directement la puissance réseau auprès d'un **onduleur Fronius / Smart Meter**, calcule en temps réel la puissance disponible et pilote un **dimmer Wi-Fi RobotDyn** pour envoyer le surplus vers un chauffe-eau électrique.
+Le but est de consommer localement le surplus PV tout en restant au plus près de zéro au point de livraison, avec un léger biais volontaire vers l'export pour limiter les micro-imports lors des variations rapides de charge ou de production.
 
-L'objectif est de rester au plus près de **0 W réseau** tout en conservant une très légère exportation afin d'éviter les petits imports dus aux variations rapides de charge.
-
-> Version actuelle de la logique Zero Grid : **V13.4**  
-> Dimmer ECS testé : **firmware 20260514**  
-> Charge actuellement calibrée : **800 W**
+> **Firmware PV Router : V14.4**  
+> **Algorithme de régulation Zero Grid : V14.3**  
+> **Interface Fronius : Solar API v1**  
+> **Endpoint Fronius utilisé : `/solar_api/v1/GetPowerFlowRealtimeData.fcgi`**  
+> **Dimmer RobotDyn testé : firmware `Version 20260514`**
 
 ![Routeur TTGO](./img/routeur.jpg)
 
 ---
 
-## 1. Fonctionnement
-
-Le principe de la version Fronius est simple :
+## 1. Architecture
 
 ```text
-Fronius / Smart Meter
+                         réseau 230 V
+                              ^
+                              |
+Fronius + Smart Meter         |
+        |                     |
+        | Solar API v1        |
+        | HTTP / PowerFlow    |
+        v                     |
+     ESP32 / TTGO             |
+        |                     |
+        | Zero Grid V14.3     |
+        | HTTP POWER=0..100   |
+        v                     |
+ RobotDyn Wi-Fi Dimmer -------+
         |
-        | GetPowerFlowRealtimeData.fcgi
         v
-      ESP32
-        |
-        | calcul Zero Grid
-        v
-RobotDyn Wi-Fi Dimmer
-        |
-        v
-Chauffe-eau ECS
+ chauffe-eau / résistance
 ```
 
-Le Fronius fournit notamment :
-
-- `P_Grid` : puissance échangée avec le réseau ;
-- `P_PV` : production photovoltaïque.
-
-Convention utilisée par le firmware :
+La **boucle de régulation ne dépend ni de MQTT ni de Home Assistant**. Le chemin critique est uniquement :
 
 ```text
-P_Grid > 0  = import réseau
-P_Grid < 0  = export réseau
+Fronius -> ESP32 -> RobotDyn
 ```
 
-Le contrôleur vise actuellement :
-
-```text
-Cible réseau : -10 W
-Zone morte   : -20 W à 0 W
-```
-
-Cela laisse volontairement quelques watts d'export au lieu de chercher exactement `0 W` à chaque mesure.
+MQTT, Home Assistant, le dashboard Web et l'écran sont des couches de télémétrie / interface.
 
 ---
 
-## 2. Pourquoi la régulation tient compte du dimmer réel
+## 2. Matériel testé
 
-La puissance réseau mesurée par le Fronius contient déjà la consommation du chauffe-eau.
+Configuration de référence du projet :
 
-Le firmware ne fait donc pas simplement :
-
-```text
-surplus solaire -> pourcentage dimmer
-```
-
-Il part de la puissance **réellement appliquée** au chauffe-eau et ajoute ou retire la correction nécessaire.
-
-Exemple avec une charge de 800 W :
-
-```text
-Dimmer réel       : 50 %  -> environ 400 W
-Export réseau     : 200 W
-Nouvelle cible    : environ 600 W
-Nouvelle consigne : environ 75 %
-```
-
-Cette méthode évite de sous-estimer le surplus lorsque le chauffe-eau absorbe déjà une partie de la production.
-
----
-
-## 3. Matériel utilisé / testé
-
-Configuration actuelle :
-
-- ESP32 / **TTGO T-Display** ;
-- onduleur **Fronius** avec Smart Meter accessible sur le réseau local ;
-- dimmer AC Wi-Fi **RobotDyn / D1 mini** ;
-- firmware du dimmer ECS : `Version 20260514` ;
+- ESP32 **TTGO T-Display** 240 × 135, contrôleur ST7789 ;
+- onduleur **Fronius Primo 6.0-1** ;
+- **Fronius Smart Meter TS 65A-1** ;
+- dimmer Wi-Fi **RobotDyn / D1 mini** ;
+- firmware RobotDyn testé : `Version 20260514` ;
 - triac BTA16 sur le montage actuellement utilisé ;
-- sonde Dallas raccordée au dimmer pour la température ECS ;
-- chauffe-eau / charge résistive actuellement limitée à **800 W** ;
-- MQTT / Home Assistant facultatif pour la télémétrie.
+- sonde Dallas / DS18B20 côté RobotDyn pour la température ECS ;
+- chauffe-eau résistif calibré dans le PV Router à **800 W** ;
+- MQTT / Home Assistant facultatifs.
 
-Le projet historique peut également fonctionner avec la mesure locale par transformateur / SCT013. Cette branche est cependant principalement consacrée au fonctionnement **Fronius Zero Grid**.
-
----
-
-## 4. Sécurité
-
-Ce projet commande une charge secteur et peut être utilisé sur un chauffe-eau.
-
-- Le logiciel ne remplace pas les protections électriques matérielles.
-- Utiliser un disjoncteur, une protection différentielle et un câblage adaptés.
-- Conserver les sécurités thermiques du chauffe-eau.
-- Toute intervention sur le 230 V doit être réalisée hors tension et par une personne compétente.
-
-En cas de perte de données Fronius ou d'état de sécurité anormal, le firmware demande au dimmer de revenir à `POWER=0`.
+Le dépôt contient encore des éléments hérités de l'ancienne mesure locale par transformateur de courant, mais cette branche est conçue et maintenue autour de la **mesure Fronius Solar API v1**.
 
 ---
 
-# Installation / HOW TO
+# Fronius : source de vérité du Zero Grid
 
-## 5. Prérequis logiciel
+## 3. API Fronius utilisée
 
-Le projet utilise **PlatformIO**.
-
-Exemple avec VS Code + extension PlatformIO ou PlatformIO CLI.
-
-Cloner le dépôt puis se placer dans son répertoire :
-
-```bash
-git clone <URL_DU_DEPOT>
-cd pv-router-esp32-v2025
-```
-
-La configuration PlatformIO par défaut cible :
-
-```text
-ttgo-t-display
-```
-
-Le fichier `platformio.ini` contient actuellement un `upload_port` adapté à la machine de développement du projet. Si le port série est différent sur votre ordinateur, modifier ou supprimer cette ligne.
-
----
-
-## 6. Créer la configuration de compilation
-
-Le fichier contenant les identifiants personnels n'est pas destiné à être versionné.
-
-Créer `src/config/config.h` depuis l'exemple :
-
-```bash
-cp src/config/config.example.h src/config/config.h
-```
-
-Modifier ensuite au minimum :
-
-```cpp
-#define WIFI_NETWORK "MON_WIFI"
-#define WIFI_PASSWORD "MON_MOT_DE_PASSE"
-
-#define IP_FRONIUS "192.168.x.x"
-
-#define MQTT_SERVER "192.168.x.x"
-#define MQTT_PORT 1883
-#define MQTT_USER "mon_user"
-#define MQTT_PASSWORD "mon_password"
-```
-
-Si MQTT n'est pas utilisé :
-
-```cpp
-#define MQTT_CLIENT false
-```
-
-Pour activer les fonctions Home Assistant prévues par cette branche :
-
-```cpp
-#define HA_ENABLED true
-```
-
----
-
-## 7. Configuration SPIFFS
-
-Créer les fichiers de configuration à partir des modèles :
-
-```bash
-cp data/config.json.ori data/config.json
-cp data/wifi.json.ori data/wifi.json
-```
-
-### `data/config.json`
-
-Les paramètres les plus importants pour la branche Fronius sont :
-
-```json
-{
-  "autonome": false,
-  "dimmer": "192.168.100.29",
-  "tmax": 65
-}
-```
-
-### `autonome`
-
-```text
-false = routage volontairement désactivé
-true  = régulation Zero Grid autorisée
-```
-
-Le modèle fourni garde volontairement `autonome=false` pour éviter qu'une nouvelle installation commence à router avant d'avoir été vérifiée.
-
-### `dimmer`
-
-Adresse IP du dimmer RobotDyn.
-
-Cette même adresse est maintenant utilisée :
-
-- pour lire `/state` ;
-- pour envoyer les commandes `/?POWER=...`.
-
-Il n'est donc plus nécessaire de maintenir deux adresses différentes dans le code.
-
-### `tmax`
-
-Température maximale ECS utilisée par les fonctions de télémétrie / état.
-
----
-
-## 8. Compiler
-
-```bash
-pio run
-```
-
-La branche dispose également d'une CI GitHub Actions qui compile le firmware TTGO à chaque push / pull request.
-
----
-
-## 9. Flasher le firmware
-
-```bash
-pio run -t upload
-```
-
-Puis, pour un premier déploiement ou lorsque les fichiers SPIFFS ont changé :
-
-```bash
-pio run -t uploadfs
-```
-
-Ouvrir ensuite le moniteur série :
-
-```bash
-pio device monitor -b 115200
-```
-
----
-
-## 10. Vérification au démarrage
-
-Un démarrage normal doit montrer notamment :
-
-```text
-WiFi connected
-[FRONIUS] ONLINE PV=... W GRID=... W
-[DIMMER] LINK OK ACTUAL=...% CMD=...% TEMP=... C RSSI=...
-```
-
-Sur le TTGO, les informations principales sont :
-
-- état Fronius ;
-- production PV ;
-- puissance réseau ;
-- pourcentage ECS ;
-- température ECS.
-
----
-
-# API utilisées
-
-## 11. Fronius
-
-Endpoint principal :
+Le firmware interroge directement :
 
 ```text
 GET http://<IP_FRONIUS>/solar_api/v1/GetPowerFlowRealtimeData.fcgi
 ```
 
-Le firmware utilise une seule acquisition Fronius pour alimenter :
+Il s'agit de la **Fronius Solar API v1**, endpoint PowerFlow temps réel. Cette branche **ne base pas la régulation sur MQTT, Modbus ou Home Assistant**.
 
-- la régulation Zero Grid ;
-- l'écran ;
-- MQTT / Home Assistant ;
-- les états de diagnostic.
+Le JSON est accepté uniquement si :
 
-Paramètres actuels :
+- la requête HTTP retourne 200 ;
+- le JSON est valide ;
+- `Head.Status.Code == 0` ;
+- `Body.Data.Site.P_Grid` existe ;
+- `P_Grid` est une valeur finie et reste dans une plage cohérente.
+
+La production PV est lue dans :
 
 ```text
-Intervalle de lecture : 1,5 s
-Timeout HTTP          : 700 ms
-Donnée périmée après  : 4 s
+Body.Data.Site.P_PV
 ```
 
-Une mesure n'est utilisée que si le JSON est valide, si `Status.Code == 0` et si `P_Grid` est cohérent.
+avec repli éventuel sur :
+
+```text
+Body.Data.Inverters.1.P
+```
+
+### Convention de signe utilisée
+
+```text
+P_Grid > 0  = import depuis le réseau
+P_Grid < 0  = export vers le réseau
+```
+
+Exemple :
+
+```text
+P_PV   = 4800 W
+P_Grid = -1200 W
+```
+
+signifie environ 4,8 kW de production et 1,2 kW exportés.
+
+### Cadence Fronius
+
+```text
+Lecture PowerFlow     : toutes les 1,5 s
+Timeout HTTP          : 700 ms
+Donnée considérée stale : après 4 s
+```
+
+Chaque mesure Fronius validée incrémente un compteur d'échantillon. La régulation ne prend **qu'une décision par nouvel échantillon validé**, ce qui évite de recalculer plusieurs fois à partir de la même donnée.
 
 ---
 
-## 12. RobotDyn ECS
+# Régulation Zero Grid V14.3
 
-### Envoyer une consigne absolue
+## 4. Objectif et valeurs par défaut
+
+Les réglages V14.3 par défaut sont :
+
+```text
+Puissance résistance        : 800 W
+Dimmer maximum              : 100 %
+Cible réseau                : -15 W
+Bande morte                 : ±10 W
+Bande cible effective       : -25 W à -5 W
+```
+
+Une légère exportation est donc volontairement conservée.
+
+Ces valeurs sont maintenant configurables depuis l'interface Web V2 et stockées dans `config.json` :
+
+```json
+{
+  "heater_power_w": 800,
+  "grid_target_w": -15,
+  "grid_deadband_w": 10,
+  "dimmer_max_percent": 100
+}
+```
+
+Les anciens `config.json` restent compatibles : si ces clés sont absentes, les valeurs ci-dessus sont utilisées.
+
+## 5. Principe de calcul
+
+`P_Grid` contient déjà l'effet de la résistance si elle chauffe. Le routeur part donc de la puissance réellement appliquée au chauffe-eau, puis calcule la correction nécessaire pour amener le réseau vers la cible.
+
+Approximation physique utilisée :
+
+```text
+Pheater_cible = Pheater_actuel + (Pcible_reseau - Pgrid_actuel)
+```
+
+Exemple, résistance calibrée à 800 W :
+
+```text
+Dimmer réel       : 50 %  -> ~400 W
+P_Grid            : -200 W
+Cible réseau      : -15 W
+Correction        : +185 W
+Puissance CE cible: ~585 W
+Dimmer cible      : ~73 %
+```
+
+V14.3 ne repose plus sur des rampes arbitraires `+3/+8/+20 %`. La montée suit directement le surplus calculé, avec une borne prédictive empêchant de demander davantage que l'export réellement visible.
+
+## 6. Réaction aux imports
+
+L'import réseau est prioritaire. Les seuils internes actuels sont :
+
+```text
+Import rapide      : 80 W
+Import urgence     : 250 W
+Réserve rapide     : 25 W
+Réserve urgence    : 50 W
+```
+
+La baisse de puissance n'est pas limitée par une rampe : si un appareil démarre dans la maison, le routeur peut délester immédiatement la résistance.
+
+## 7. Saturation de la charge
+
+Si le dimmer atteint sa limite maximale et qu'il reste encore du surplus :
+
+```text
+LOAD LIMITED
+```
+
+Le routeur ne peut physiquement plus absorber davantage ; le surplus restant est exporté.
+
+---
+
+# RobotDyn
+
+## 8. Commande de puissance
+
+Le PV Router envoie une **consigne absolue** :
 
 ```text
 GET http://<IP_DIMMER>/?POWER=<0..100>
@@ -311,150 +214,257 @@ GET http://<IP_DIMMER>/?POWER=<0..100>
 Exemples :
 
 ```text
-POWER=0    -> arrêt
-POWER=25   -> 25 %
-POWER=100  -> pleine puissance
+/?POWER=0
+/?POWER=25
+/?POWER=100
 ```
 
-Avec la charge actuelle de 800 W :
+Avec une résistance réellement calibrée à 800 W :
 
 ```text
-1 % ~= 8 W
-50 % ~= 400 W
+1 %   ~= 8 W
+50 %  ~= 400 W
 100 % ~= 800 W
 ```
 
-### Lire l'état
+La valeur `/config.charge` du RobotDyn peut être différente : **la régulation utilise la puissance physique configurée dans le PV Router**, pas automatiquement la valeur `charge` du RobotDyn.
+
+## 9. État temps réel RobotDyn
 
 ```text
 GET http://<IP_DIMMER>/state
 ```
 
-Exemple de réponse :
+Exemple :
 
 ```json
 {
   "dimmer": 0,
   "commande": 0,
-  "temperature": "45.9",
+  "temperature": "55.5",
   "power": 0,
   "Ptotal": 0,
-  "RSSI": -55,
+  "RSSI": -59,
   "version": "Version 20260514",
   "onoff": true,
   "alerte": "RAS",
-  "dallas0": "45.9"
+  "dallas0": "55.5"
 }
 ```
 
-Le firmware privilégie `dallas0` pour la température puis utilise `temperature` en secours.
+Le PV Router utilise en priorité `dallas0` pour l'eau ECS, puis `temperature` en secours.
 
-Cadence de lecture de `/state` :
+Cadence :
 
 ```text
-Dimmer en cours de synchronisation : environ 2 s
-Dimmer synchronisé                 : environ 5 s
-Timeout HTTP                       : 500 ms
+Dimmer en rattrapage / désynchronisé : ~2 s
+Dimmer synchronisé                   : ~5 s
+Timeout HTTP                         : 500 ms
+```
+
+La commande est également rafraîchie toutes les **60 s**, notamment pour rester très en dessous de l'auto-off RobotDyn de 5 minutes.
+
+Une désynchronisation importante `CMD / ACTUAL` maintenue environ 15 s provoque un renvoi de la commande.
+
+## 10. Configuration thermique RobotDyn
+
+Le PV Router lit aussi :
+
+```text
+GET http://<IP_DIMMER>/config
+```
+
+Les champs importants sont :
+
+```text
+maxtemp
+trigger
+minpow
+maxpow
+charge
+```
+
+`maxtemp` est la consigne thermique normale du RobotDyn et reste prioritaire sur le `tmax` de secours du PV Router.
+
+`trigger` correspond à l'hystérésis thermique en pourcentage de `maxtemp`.
+
+Le firmware RobotDyn testé travaille avec des entiers et applique effectivement :
+
+```text
+reprise = maxtemp - ((maxtemp * trigger) / 100)
+```
+
+avec troncature entière.
+
+Exemple actuel :
+
+```text
+maxtemp = 56 °C
+trigger = 3 %
+
+(56 * 3) / 100 = 1
+reprise = 55 °C
+```
+
+Le PV Router reproduit **exactement la même formule**. Une fois `TEMP MAX` atteint, il maintient la chauffe bloquée (`TEMP HOLD`) jusqu'à la température de reprise.
+
+Si `/config` n'est pas disponible, un repli conservateur de **2 °C** est utilisé temporairement.
+
+Cadence `/config` :
+
+```text
+Après succès : toutes les 30 s
+Tant que non disponible : nouvelle tentative toutes les 10 s
 ```
 
 ---
 
-# Régulation Zero Grid
+# Sécurités / fail-safe
 
-## 13. Boucle de contrôle
+## 11. Conditions qui imposent POWER=0
 
-Chaque nouvelle mesure Fronius validée déclenche au maximum une nouvelle décision de régulation.
+Le PV Router force une demande `POWER=0` si :
 
-Le dimmer n'est donc pas recalculé plusieurs fois à partir de la même mesure Fronius.
-
-La logique suit principalement :
-
-```text
-P_Grid < -20 W
-    -> surplus
-    -> augmenter la charge ECS
-
--20 W <= P_Grid <= 0 W
-    -> cible atteinte
-    -> conserver la puissance
-
-P_Grid > 0 W
-    -> import
-    -> diminuer la charge ECS
-```
-
-La cible mathématique interne est `-10 W`.
-
----
-
-## 14. Limite de puissance
-
-La charge est actuellement définie à :
-
-```text
-800 W maximum
-```
-
-Si le chauffe-eau atteint 100 % et qu'il reste encore du surplus solaire, le firmware ne peut plus l'absorber.
-
-L'état devient alors :
-
-```text
-LOAD LIMITED
-```
-
-Le surplus restant est exporté vers le réseau.
-
----
-
-## 15. Synchronisation de la consigne
-
-Le firmware compare :
-
-```text
-consigne demandée
-vs
-valeur réellement remontée par /state
-```
-
-Si l'écart reste important trop longtemps, la consigne est renvoyée.
-
-Une commande est également rafraîchie périodiquement afin de rester compatible avec l'auto-off du firmware RobotDyn.
-
-```text
-Keepalive commande : 60 s
-Auto-off RobotDyn   : 5 min
-```
-
----
-
-# Fail-safe
-
-## 16. Conditions qui forcent POWER=0
-
-Le routeur demande `POWER=0` dans les cas suivants :
-
-- Fronius inaccessible ;
-- données Fronius trop anciennes ;
+- le Fronius est inaccessible ;
+- la dernière mesure Fronius a plus de 4 s ;
 - `autonome=false` ;
-- `onoff=false` remonté par le dimmer ;
-- alarme dimmer différente de `RAS`.
+- le RobotDyn remonte `onoff=false` ;
+- une alarme RobotDyn non thermique est active ;
+- la protection thermique ECS locale est active.
 
-En cas d'échec de la commande de sécurité, une nouvelle tentative est faite rapidement.
+Une tentative de fail-safe échouée est retentée rapidement. Une commande de sécurité déjà acquittée est périodiquement rafraîchie.
 
-La régulation de sécurité ne dépend ni de Home Assistant ni du broker MQTT.
+**MQTT et Home Assistant ne font pas partie de cette chaîne de sécurité.**
+
+---
+
+# Écran TTGO
+
+## 12. Dashboard principal
+
+Le dashboard affiche notamment :
+
+- heure ;
+- température ECS / Tmax ;
+- état `CE OK`, `CE SYNC`, `TEMP MAX`, `TEMP HOLD` ;
+- grand bandeau `IMPORT`, `ZERO GRID`, `DISPO` ou `SURPLUS` ;
+- production PV ;
+- import/export réseau ;
+- pourcentage et puissance chauffe-eau ;
+- consommation maison estimée ;
+- température de reprise en cas de blocage thermique ;
+- jauge de puissance.
+
+L'affichage V14.4 utilise un **rendu différentiel** : seules les zones dont la valeur change sont redessinées, afin d'éviter le scintillement périodique du ST7789.
+
+Un appui court bascule vers la page de diagnostic. Un appui long conserve la fonction d'extinction manuelle.
+
+## 13. Écran de boot
+
+Le démarrage est graphique et montre :
+
+```text
+PV ROUTER
+FW V14.4 | ZERO GRID V14.3
+```
+
+avec un flux d'énergie vectoriel :
+
+```text
+soleil -> maison -> chauffe-eau -> réseau
+```
+
+et les étapes Wi-Fi, configuration, serveur Web et prêt.
+
+---
+
+# Interface Web V2
+
+## 14. Dashboard
+
+```text
+http://<IP_DU_ROUTEUR>/
+```
+
+Le dashboard est autonome et ne dépend d'aucun CDN. Il fournit :
+
+- mesures PV / réseau / maison / chauffe-eau ;
+- état Fronius / RobotDyn / MQTT ;
+- température ECS et Tmax ;
+- régulation V14.3 : cible, bande, correction, CMD / ACTUAL ;
+- historique navigateur sur environ 30 minutes ;
+- diagnostic copiable ;
+- mémoire libre et uptime.
+
+L'historique du graphe reste dans le navigateur : il n'écrit pas en permanence dans la flash de l'ESP32.
+
+## 15. Configuration
+
+```text
+http://<IP_DU_ROUTEUR>/config.html
+```
+
+Paramètres V14 actuellement éditables :
+
+```text
+Adresse IP RobotDyn
+Timeout écran
+Tmax ECS de secours
+Puissance réelle de la résistance
+Cible réseau
+Bande morte
+Limite maximale du dimmer
+```
+
+Les réglages sensibles internes de réaction rapide restent volontairement dans le firmware.
+
+## 16. API Web locale du PV Router
+
+### État complet
+
+```text
+GET /api/status
+```
+
+Le JSON expose notamment :
+
+```text
+version / firmware_version = V14.4
+fronius_api               = Solar API v1
+fronius_powerflow_path    = /solar_api/v1/GetPowerFlowRealtimeData.fcgi
+regulation.version        = V14.3
+```
+
+ainsi que PV, réseau, maison, chauffe-eau, ECS, RobotDyn, MQTT, uptime et mémoire.
+
+### Configuration
+
+```text
+GET  /api/config
+POST /api/config
+```
+
+### Sauvegarde / restauration
+
+```text
+GET  /api/config/export
+POST /api/config/import
+```
+
+### Écran / redémarrage
+
+```text
+POST /api/screen/toggle
+POST /api/restart
+```
 
 ---
 
 # MQTT / Home Assistant
 
-## 17. Principe
+## 17. MQTT
 
-MQTT est utilisé uniquement pour la **télémétrie**.
-
-La perte de MQTT ou de Home Assistant n'arrête pas la boucle locale Fronius -> ESP32 -> RobotDyn.
-
-Topic principal :
+Topic d'état :
 
 ```text
 pvrouter/state
@@ -469,214 +479,353 @@ pvrouter/availability
 Le firmware publie notamment :
 
 - production PV ;
-- puissance réseau ;
+- réseau ;
 - consommation maison estimée ;
 - puissance disponible ;
 - puissance chauffe-eau ;
 - consigne dimmer ;
 - dimmer réel ;
-- température ECS ;
-- RSSI Wi-Fi ;
+- température et Tmax ECS ;
+- RSSI ;
 - état Fronius ;
-- état dimmer ;
-- état de synchronisation.
+- état RobotDyn ;
+- synchronisation.
 
-Home Assistant Discovery est publié automatiquement lorsque cette fonction est activée.
-
----
-
-# Diagnostic
-
-## 18. Fronius OFFLINE
-
-Vérifier :
-
-1. que l'ESP32 et le Fronius sont sur le même réseau ;
-2. la valeur `IP_FRONIUS` ;
-3. depuis un navigateur :
-
-```text
-http://<IP_FRONIUS>/solar_api/v1/GetPowerFlowRealtimeData.fcgi
-```
-
-Le fail-safe doit maintenir le dimmer à 0 % tant que les données Fronius ne sont pas valides.
+Home Assistant Discovery est disponible si `HA_ENABLED` est activé.
 
 ---
 
-## 19. DIMMER OFFLINE
+# Installation / HOW TO
 
-Tester :
+## 18. Récupérer le dépôt
 
 ```bash
-curl http://<IP_DIMMER>/state
+git clone <URL_DU_DEPOT>
+cd pv-router-esp32-v2025
+git checkout feature/fronius-zero-grid-v13-dimmer-20260514
+```
+
+Le projet utilise **PlatformIO**.
+
+## 19. Créer `src/config/config.h`
+
+Le fichier local contient les secrets et n'est pas destiné à être versionné :
+
+```bash
+cp src/config/config.example.h src/config/config.h
+```
+
+À renseigner au minimum :
+
+```cpp
+#define WIFI_NETWORK "MON_WIFI"
+#define WIFI_PASSWORD "MON_MOT_DE_PASSE"
+
+#define IP_FRONIUS "192.168.x.x"
+
+#define MQTT_SERVER "192.168.x.x"
+#define MQTT_PORT 1883
+#define MQTT_USER "mon_user"
+#define MQTT_PASSWORD "mon_password"
+```
+
+Pour désactiver MQTT :
+
+```cpp
+#define MQTT_CLIENT false
+```
+
+Pour Home Assistant Discovery :
+
+```cpp
+#define HA_ENABLED true
+```
+
+### Wi-Fi via SPIFFS
+
+Si `WIFI_PASSWORD` vaut volontairement `"xxx"`, le firmware tente d'utiliser `/wifi.json` dans SPIFFS. Sinon les identifiants de `config.h` sont utilisés.
+
+## 20. Préparer SPIFFS pour une première installation
+
+```bash
+cp data/config.json.ori data/config.json
+cp data/wifi.json.ori data/wifi.json
+```
+
+Dans `data/config.json`, vérifier au minimum :
+
+```json
+{
+  "autonome": false,
+  "dimmer": "192.168.100.29",
+  "tmax": 65,
+  "screentime": 0,
+  "heater_power_w": 800,
+  "grid_target_w": -15,
+  "grid_deadband_w": 10,
+  "dimmer_max_percent": 100
+}
+```
+
+`autonome=false` est conseillé lors du premier flash. Passer à `true` uniquement après avoir validé la communication Fronius et RobotDyn.
+
+## 21. Compiler
+
+```bash
+pio run
+```
+
+La CI GitHub Actions compile également le firmware TTGO sur la branche / PR.
+
+## 22. Flasher le firmware
+
+```bash
+pio run -t upload
 ```
 
 Puis :
 
 ```bash
+pio device monitor -b 115200
+```
+
+## 23. Flasher SPIFFS
+
+Pour un premier déploiement ou après modification de `data/index.html`, `data/config.html`, etc. :
+
+```bash
+pio run -t uploadfs
+```
+
+### IMPORTANT : `uploadfs` remplace le filesystem
+
+`config.json` peut donc être perdu si on ne le sauvegarde pas avant.
+
+La méthode recommandée depuis Web V2 est :
+
+1. ouvrir `http://<IP_DU_ROUTEUR>/config.html` ;
+2. cliquer **Exporter config.json** ;
+3. conserver le fichier ;
+4. seulement ensuite faire `uploadfs` ;
+5. restaurer le fichier avec **Importer config.json** si nécessaire.
+
+En CLI, le bon endpoint de sauvegarde complète est :
+
+```bash
+curl --connect-timeout 5 http://<IP_DU_ROUTEUR>/api/config/export -o data/config.json
+pio run -t uploadfs
+rm data/config.json
+```
+
+Ne pas sauvegarder `/api/config` comme `data/config.json` : `/api/config` est une vue simplifiée de la configuration Web, alors que `/api/config/export` renvoie le **vrai fichier SPIFFS complet**.
+
+---
+
+# Vérification après flash
+
+## 24. Logs attendus
+
+Exemple de démarrage sain :
+
+```text
+WiFi connected
+IP address:
+192.168.x.x
+Loading configuration...
+start Web server
+[FRONIUS] ONLINE PV=... W GRID=... W
+[DIMMER] CONFIG OK MAX=... C TRIGGER=...% RELEASE=... C
+[DIMMER] LINK OK ACTUAL=...% CMD=...% TEMP=... C ...
+[MQTT] Connecting...connected
+```
+
+Le Fronius doit être ONLINE avant d'autoriser le routage.
+
+## 25. Tester directement le Fronius
+
+Dans un navigateur ou avec `curl` :
+
+```text
+http://<IP_FRONIUS>/solar_api/v1/GetPowerFlowRealtimeData.fcgi
+```
+
+Vérifier notamment :
+
+```text
+Head.Status.Code = 0
+Body.Data.Site.P_Grid
+Body.Data.Site.P_PV
+```
+
+## 26. Tester directement le RobotDyn
+
+```bash
+curl http://<IP_DIMMER>/state
+curl http://<IP_DIMMER>/config
 curl 'http://<IP_DIMMER>/?POWER=0'
 ```
 
-Vérifier que l'adresse configurée dans `config.json` correspond bien au dimmer ECS.
+Pour modifier le trigger thermique directement sur le firmware RobotDyn testé :
+
+```text
+http://<IP_DIMMER>/get?trigger=3&save=1
+```
+
+puis vérifier avec :
+
+```text
+http://<IP_DIMMER>/config
+```
 
 ---
 
-## 20. Température absente
+# Diagnostic rapide
 
-Vérifier que `/state` contient au moins l'un des champs :
+## 27. `FRONIUS OFFLINE`
+
+Vérifier :
+
+- l'IP `IP_FRONIUS` ;
+- que l'ESP32 et le Fronius peuvent communiquer sur le LAN ;
+- que la Solar API v1 répond ;
+- que `P_Grid` est présent et que `Head.Status.Code == 0`.
+
+Le fail-safe doit maintenir `POWER=0` tant que la donnée Fronius n'est pas fraîche.
+
+## 28. `DIMMER OFFLINE`
+
+Vérifier :
+
+```text
+http://<IP_DIMMER>/state
+```
+
+et l'adresse configurée dans Web V2 / `config.json`.
+
+## 29. Température absente
+
+`/state` doit contenir :
 
 ```text
 dallas0
+```
+
+ou, à défaut :
+
+```text
 temperature
 ```
 
-Lorsque la communication dimmer est perdue, la température affichée est volontairement effacée afin de ne pas présenter une ancienne valeur comme actuelle.
+La température affichée est volontairement effacée lorsque la communication RobotDyn devient périmée, afin de ne pas présenter une ancienne mesure comme actuelle.
 
----
+## 30. `TEMP MAX` / `TEMP HOLD`
 
-## 21. Pas de routage malgré du soleil
+- `TEMP MAX` : la température a atteint ou dépassé `maxtemp` ;
+- `TEMP HOLD` : la température est redescendue sous Tmax mais n'a pas encore atteint la température de reprise calculée depuis `trigger` ;
+- `REPRISE xx°C` est visible sur le TTGO.
+
+## 31. Pas de routage malgré un surplus
 
 Vérifier dans cet ordre :
 
-1. `FRONIUS = OK` ;
-2. `DIMMER = ONLINE` ;
+1. Fronius ONLINE ;
+2. RobotDyn ONLINE ;
 3. `autonome=true` ;
-4. aucune alarme RobotDyn ;
-5. `onoff=true` ;
-6. `P_Grid` devient négatif lorsque la production dépasse la consommation.
+4. `onoff=true` ;
+5. aucune alarme non thermique ;
+6. pas de `TEMP HOLD` ;
+7. `P_Grid` devient bien négatif en export.
 
 ---
 
-# Structure du projet
+# OTA
 
-## 22. Fichiers principaux
-
-```text
-src/main.cpp
-    création des tâches FreeRTOS
-
-src/tasks/measure-electricity.h
-    acquisition et validation Fronius
-
-src/tasks/Dimmer.h
-    watchdog local et déclenchement de la régulation
-
-src/functions/froniusZeroGrid.h
-    calcul Zero Grid et commandes RobotDyn
-
-src/tasks/gettemp.h
-    lecture /state du dimmer et température ECS
-
-src/tasks/updateDisplay.h
-    écran TTGO
-
-src/functions/Mqtt_http_Functions.h
-    MQTT et Home Assistant Discovery
-
-src/functions/spiffsFunctions.h
-    lecture / écriture config.json et wifi.json
-```
-
-L'ancien chemin Fronius redondant a été supprimé : la branche utilise maintenant une seule tâche active d'acquisition Fronius.
-
----
-
-# Mise à jour OTA
-
-## 23. OTA via l'interface Web
-
-Lorsque le serveur Web est activé, l'OTA est accessible via :
+## 32. Mise à jour OTA Web
 
 ```text
 http://<IP_DU_ROUTEUR>/update
 ```
 
-Construire le firmware avec PlatformIO puis envoyer le fichier `.bin` correspondant.
+La version actuelle utilise `AsyncElegantOTA`.
+
+**À ce jour, aucune authentification n'est appliquée à `/update` dans le firmware actif.** L'interface doit donc être considérée comme accessible aux appareils ayant accès au LAN. Le champ historique `otapassword` de `config.json` n'est pas appliqué à cette route actuelle.
 
 ---
 
-# Ancienne partie DIY / mesure locale
+# Structure du projet
 
-Le projet est issu d'un routeur PV utilisant une mesure locale par déphasage / transformateur et SCT013.
-
-### ESP32
+## 33. Fichiers principaux
 
 ```text
-OLED :
-3.3 V
-GND
-21 SCL
-22 SDA
+src/main.cpp
+    initialisation et création des tâches FreeRTOS
+
+src/config/version.h
+    versions firmware / Zero Grid / API Fronius
+
+src/tasks/measure-electricity.h
+    acquisition Fronius Solar API v1
+
+src/tasks/Dimmer.h
+    watchdog et déclenchement de la régulation une fois par échantillon Fronius
+
+src/functions/froniusZeroGrid.h
+    algorithme Zero Grid V14.3 et commandes POWER RobotDyn
+
+src/tasks/gettemp.h
+    /state + /config RobotDyn, Dallas, Tmax, trigger et hystérésis
+
+src/tasks/updateDisplay.h
+    primitives / ancien moteur d'affichage TTGO
+
+src/tasks/smoothDisplay.h
+    rendu différentiel TTGO actif V14.4
+
+src/tasks/bootScreen.h
+    boot graphique vectoriel
+
+src/functions/webFunctions.h
+    Web V2 et API locale /api/*
+
+src/functions/Mqtt_http_Functions.h
+    télémétrie MQTT et Home Assistant Discovery
+
+src/functions/spiffsFunctions.h
+    lecture / écriture config.json et wifi.json
+
+data/index.html
+    dashboard Web V2
+
+data/config.html
+    page de configuration V2
 ```
 
-### TTGO
+---
+
+# Versions
+
+## 34. V14.4 — firmware actuel
+
+V14.4 regroupe notamment :
+
+- régulation physique rapide **Zero Grid V14.3** ;
+- paramètres de régulation configurables Web ;
+- puissance réelle de résistance configurable ;
+- lecture `maxtemp` + `trigger` RobotDyn et hystérésis identique au firmware RobotDyn ;
+- dashboard Web V2, graphe 30 min et diagnostic ;
+- sauvegarde / restauration complète de `config.json` ;
+- écran TTGO enrichi ;
+- boot graphique ;
+- rendu différentiel TTGO pour réduire le scintillement ;
+- version firmware / version régulation / version API Fronius séparées et explicites.
+
+## 35. Résumé des versions à ne pas confondre
 
 ```text
-pin 32 GRID
-pin 33 SCT013
+PV Router firmware      : V14.4
+Zero Grid algorithm     : V14.3
+Fronius interface       : Solar API v1
+RobotDyn firmware testé : Version 20260514
 ```
 
-La partie historique RobotDyn est issue du projet :
-
-https://github.com/xlyric/PV-discharge-Dimmer-AC-Dimmer-KIT-Robotdyn
-
-Une documentation historique en français est également disponible :
-
-[Doc installation.pdf](./Doc%20installation.pdf)
-
----
-
-# Développement
-
-## 24. CI GitHub
-
-Le workflow :
-
-```text
-.github/workflows/platformio-v13-dimmer.yml
-```
-
-compile automatiquement l'environnement :
-
-```text
-ttgo-t-display
-```
-
-Cela permet de détecter les erreurs de compilation avant le flash matériel.
-
----
-
-## 25. Philosophie de la branche V13
-
-Les priorités sont :
-
-1. récupérer une seule fois chaque mesure Fronius ;
-2. valider les données avant de les utiliser ;
-3. réguler localement sans dépendance au cloud ;
-4. utiliser l'état réel du dimmer ;
-5. revenir à `POWER=0` en cas de doute ;
-6. garder MQTT / Home Assistant uniquement pour l'observation ;
-7. conserver une régulation simple et explicable.
-
----
-
-## 26. État actuel
-
-Fonctions validées sur matériel :
-
-- connexion Fronius ;
-- lecture `P_Grid` / `P_PV` ;
-- communication RobotDyn `/state` ;
-- lecture température Dallas du chauffe-eau ;
-- affichage TTGO ;
-- commandes absolues `POWER=0..100` ;
-- fail-safe local ;
-- MQTT / Home Assistant Discovery.
-
-La validation finale du comportement dynamique Zero Grid doit être réalisée en conditions de production solaire afin d'observer les transitoires lors des changements rapides de production et de consommation.
-
----
-
-## Licence
-
-Voir [LICENSE](./LICENSE).
+Cette séparation est volontaire : une évolution de l'interface Web ou de l'écran peut faire évoluer le **firmware PV Router** sans modifier l'algorithme de régulation Zero Grid ni l'API du Fronius.
