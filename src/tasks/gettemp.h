@@ -19,8 +19,9 @@ extern volatile bool gDisplayForceRefresh;
 #define DIMMER_STATE_POLL_SYNC_MS      5000UL
 #define DIMMER_STATE_POLL_CATCHUP_MS   2000UL
 #define DIMMER_STATE_HTTP_TIMEOUT_MS    500UL
-#define DIMMER_CONFIG_POLL_MS         300000UL
+#define DIMMER_CONFIG_POLL_MS          30000UL
 #define DIMMER_CONFIG_RETRY_MS         10000UL
+#define DIMMER_ECS_HYSTERESIS_C            2.0f
 
 void GetDImmerTemp(void * parameter){
   (void)parameter;
@@ -30,6 +31,15 @@ void GetDImmerTemp(void * parameter){
   bool configKnown = false;
   unsigned long lastConfigAttemptMs = 0;
 
+  // Local ECS temperature latch. Once the maximum is reached, routing remains
+  // stopped until the water has cooled DIMMER_ECS_HYSTERESIS_C below the
+  // current RobotDyn maxtemp. This also lets a raised maxtemp release an old
+  // RobotDyn temperature alert as soon as the new configuration is observed.
+  bool ecsTempLimitActive = false;
+  bool previousIgnoredRemoteTempAlarm = false;
+  bool previousOtherRemoteAlarm = false;
+  String previousOtherRemoteAlert = "";
+
   for (;;) {
     const unsigned long now = millis();
     unsigned long nextPollMs = DIMMER_STATE_POLL_CATCHUP_MS;
@@ -38,7 +48,7 @@ void GetDImmerTemp(void * parameter){
 
     // /config contains the real normal ECS maximum temperature (maxtemp).
     // Poll it once at startup, retry reasonably fast until it succeeds, then
-    // refresh only every 5 minutes because this value changes very rarely.
+    // refresh every 30 seconds so a user setpoint change is picked up quickly.
     const unsigned long configInterval =
         configKnown ? DIMMER_CONFIG_POLL_MS : DIMMER_CONFIG_RETRY_MS;
 
@@ -119,20 +129,90 @@ void GetDImmerTemp(void * parameter){
               gDisplayValues.dimmerAlert.length() > 0 &&
               !gDisplayValues.dimmerAlert.equalsIgnoreCase("RAS");
 
+          // RobotDyn can keep "Alerte Température" active briefly after the
+          // maxtemp is raised. Distinguish this specific alert from all other
+          // alarms so a stale temperature alert cannot permanently block the
+          // router once the water is safely below the new release threshold.
+          const bool remoteTemperatureAlarm =
+              remoteAlarm &&
+              (gDisplayValues.dimmerAlert.indexOf("Temp") >= 0 ||
+               gDisplayValues.dimmerAlert.indexOf("temp") >= 0);
+
           const float waterTemp = gDisplayValues.temperature.toFloat();
           const int effectiveMaxTemp =
               gDisplayValues.dimmerMaxTemp > 0
                   ? gDisplayValues.dimmerMaxTemp
                   : config.tmax;
-          const bool tempAtOrAboveMax =
-              waterTemp > 0.0f &&
-              effectiveMaxTemp > 0 &&
-              waterTemp >= (float)effectiveMaxTemp;
+          const bool temperatureKnown =
+              waterTemp > 0.0f && effectiveMaxTemp > 0;
+          const float releaseTemp =
+              (float)effectiveMaxTemp - DIMMER_ECS_HYSTERESIS_C;
 
-          // Reuse the existing dimmerAlarm fail-safe path. A remote RobotDyn
-          // alarm OR a locally detected ECS over-temperature forces POWER=0
-          // from the Dimmer watchdog task.
-          gDisplayValues.dimmerAlarm = remoteAlarm || tempAtOrAboveMax;
+          const bool previousTempLimit = ecsTempLimitActive;
+
+          if (temperatureKnown) {
+            if (!ecsTempLimitActive) {
+              // A local threshold crossing always latches the stop. If the
+              // RobotDyn itself reports a temperature alarm close to Tmax,
+              // latch it too and require the same hysteresis before restart.
+              if (waterTemp >= (float)effectiveMaxTemp ||
+                  (remoteTemperatureAlarm && waterTemp > releaseTemp)) {
+                ecsTempLimitActive = true;
+              }
+            }
+            else if (waterTemp <= releaseTemp) {
+              ecsTempLimitActive = false;
+            }
+          }
+          else if (remoteTemperatureAlarm) {
+            // Without a trustworthy Dallas reading, remain conservative and
+            // honour the RobotDyn temperature alarm.
+            ecsTempLimitActive = true;
+          }
+
+          if (!previousTempLimit && ecsTempLimitActive) {
+            Serial.printf("[DIMMER] ECS MAX TEMP REACHED %.1f/%d C -> POWER=0\n",
+                          waterTemp,
+                          effectiveMaxTemp);
+          }
+          else if (previousTempLimit && !ecsTempLimitActive) {
+            Serial.printf("[DIMMER] ECS TEMP RELEASED %.1f C (MAX=%d C, restart<=%.1f C)\n",
+                          waterTemp,
+                          effectiveMaxTemp,
+                          releaseTemp);
+          }
+
+          const bool ignoredRemoteTemperatureAlarm =
+              remoteTemperatureAlarm &&
+              temperatureKnown &&
+              !ecsTempLimitActive;
+
+          if (ignoredRemoteTemperatureAlarm &&
+              !previousIgnoredRemoteTempAlarm) {
+            Serial.printf("[DIMMER] STALE TEMP ALARM IGNORED %.1f C < restart %.1f C (MAX=%d C)\n",
+                          waterTemp,
+                          releaseTemp,
+                          effectiveMaxTemp);
+          }
+          previousIgnoredRemoteTempAlarm = ignoredRemoteTemperatureAlarm;
+
+          const bool otherRemoteAlarm =
+              remoteAlarm && !remoteTemperatureAlarm;
+
+          if (otherRemoteAlarm &&
+              (!previousOtherRemoteAlarm ||
+               previousOtherRemoteAlert != gDisplayValues.dimmerAlert)) {
+            Serial.printf("[DIMMER] ALARM: %s\n",
+                          gDisplayValues.dimmerAlert.c_str());
+          }
+          previousOtherRemoteAlarm = otherRemoteAlarm;
+          previousOtherRemoteAlert =
+              otherRemoteAlarm ? gDisplayValues.dimmerAlert : "";
+
+          // Any non-temperature RobotDyn alarm remains an unconditional
+          // fail-safe. Temperature protection uses the local hysteresis latch.
+          gDisplayValues.dimmerAlarm =
+              otherRemoteAlarm || ecsTempLimitActive;
 
           gDisplayValues.dimmerCommOk = true;
           gDisplayValues.dimmerLastOkMs = millis();
@@ -153,16 +233,6 @@ void GetDImmerTemp(void * parameter){
                               : "--.-",
                           effectiveMaxTemp,
                           gDisplayValues.dimmerRssi);
-          }
-
-          if (tempAtOrAboveMax) {
-            Serial.printf("[DIMMER] ECS MAX TEMP %.1f/%d C -> POWER=0\n",
-                          waterTemp,
-                          effectiveMaxTemp);
-          }
-          else if (remoteAlarm) {
-            Serial.printf("[DIMMER] ALARM: %s\n",
-                          gDisplayValues.dimmerAlert.c_str());
           }
         }
         else {
