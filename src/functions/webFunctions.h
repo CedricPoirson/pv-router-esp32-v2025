@@ -50,6 +50,7 @@ static String buildApiStatus()
   const float waterTemp = gDisplayValues.temperature.toFloat();
   const int remoteMaxTemp = gDisplayValues.dimmerMaxTemp;
   const int effectiveMaxTemp = remoteMaxTemp > 0 ? remoteMaxTemp : config.tmax;
+  const bool tempHold = gDisplayValues.dimmerTempLimitActive;
 
   const bool dimmerSynced =
       dimmerOnline && (abs(dimmerCmd - dimmerActual) <= 2);
@@ -64,8 +65,8 @@ static String buildApiStatus()
     status = "FRONIUS OFFLINE";
   else if (!dimmerOnline)
     status = "DIMMER OFFLINE";
-  else if (tempAtMax)
-    status = "TEMP MAX";
+  else if (tempHold)
+    status = tempAtMax ? "TEMP MAX" : "TEMP HOLD";
   else if (gDisplayValues.dimmerAlarm)
     status = "DIMMER ALARM";
   else if (!dimmerSynced)
@@ -79,7 +80,7 @@ static String buildApiStatus()
   else
     status = "ZERO GRID";
 
-  StaticJsonDocument<2304> doc;
+  StaticJsonDocument<2560> doc;
   doc["version"] = String(VERSION);
   doc["uptime_s"] = now / 1000UL;
   doc["ip"] = gDisplayValues.IP;
@@ -137,6 +138,19 @@ static String buildApiStatus()
   ecs["max_c"] = effectiveMaxTemp;
   ecs["remote_max_c"] = remoteMaxTemp > 0 ? remoteMaxTemp : 0;
   ecs["fallback_max_c"] = config.tmax;
+  if (gDisplayValues.dimmerTriggerPercent >= 0)
+    ecs["trigger_percent"] = gDisplayValues.dimmerTriggerPercent;
+  else
+    ecs["trigger_percent"] = nullptr;
+  if (gDisplayValues.dimmerReleaseTemp > 0.0f)
+    ecs["release_c"] = gDisplayValues.dimmerReleaseTemp;
+  else
+    ecs["release_c"] = nullptr;
+  ecs["hysteresis_source"] =
+      gDisplayValues.dimmerTriggerPercent >= 0
+          ? "robotdyn_trigger"
+          : "fallback_2c";
+  ecs["temp_hold"] = tempHold;
   ecs["at_max"] = tempAtMax;
 
   String payload;
