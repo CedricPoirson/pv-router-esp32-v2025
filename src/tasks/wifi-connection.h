@@ -10,11 +10,19 @@ extern DisplayValues gDisplayValues;
 extern void goToDeepSleep();
 extern Configwifi configwifi;
 
-static bool useSpiffsWifiCredentials()
+static void beginConfiguredWiFi()
 {
-    // Keep the reconnect path aligned with setup(): when WIFI_PASSWORD is set
-    // to "xxx", credentials come from /wifi.json in SPIFFS.
-    return strcmp(WIFI_PASSWORD, "xxx") == 0;
+    WiFi.mode(WIFI_STA);
+    WiFi.setHostname(DEVICE_NAME);
+
+    // Credentials saved through the physical-button setup portal take
+    // priority. If none are stored, keep config.h as a compile-time fallback.
+    if (hasStoredWifiCredentials(configwifi)) {
+        WiFi.begin(configwifi.SID, configwifi.passwd);
+    }
+    else {
+        WiFi.begin(WIFI_NETWORK, WIFI_PASSWORD);
+    }
 }
 
 /**
@@ -30,22 +38,17 @@ void keepWiFiAlive(void * parameter){
         serial_println(F("[WIFI] Connecting"));
         gDisplayValues.currentState = CONNECTING_WIFI;
 
-        WiFi.mode(WIFI_STA);
-        WiFi.setHostname(DEVICE_NAME);
-        if (useSpiffsWifiCredentials()) {
-            WiFi.begin(configwifi.SID, configwifi.passwd);
-        }
-        else {
-            WiFi.begin(WIFI_NETWORK, WIFI_PASSWORD);
-        }
+        beginConfiguredWiFi();
 
         unsigned long startAttemptTime = millis();
 
         while (WiFi.status() != WL_CONNECTED &&
-                millis() - startAttemptTime < WIFI_TIMEOUT){}
+                millis() - startAttemptTime < WIFI_TIMEOUT) {
+            vTaskDelay(50 / portTICK_PERIOD_MS);
+        }
 
         if(WiFi.status() != WL_CONNECTED){
-            serial_println(F("[WIFI] FAILED"));
+            serial_println(F("[WIFI] FAILED - retry later"));
             vTaskDelay(WIFI_RECOVER_TIME_MS / portTICK_PERIOD_MS);
             continue;
         }
