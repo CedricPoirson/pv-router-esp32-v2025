@@ -1,9 +1,8 @@
 //***********************************
-//************* SPIFFS 
+//************* SPIFFS
 //***********************************
 #ifndef SPIFFS_FUNCTIONS
 #define SPIFFS_FUNCTIONS
-
 
 // File System
 #ifdef ESP32
@@ -12,32 +11,24 @@
 #include "config/enums.h"
 #endif
 
-#include <Wire.h>  // Only needed for Arduino 1.6.5 and earlier
-#include <ArduinoJson.h> // ArduinoJson : https://github.com/bblanchon/ArduinoJson
-
-
+#include <Wire.h>
+#include <ArduinoJson.h>
 
 const char *filename_conf = "/config.json";
-extern Config config; 
+extern Config config;
 
 //***********************************
 //************* Gestion de la configuration - Lecture du fichier de configuration
 //***********************************
-// Loads the configuration from a file
 void loadConfiguration(const char *filename, Config &config) {
-  // Open file for reading
   File configFile = SPIFFS.open(filename_conf, "r");
 
-  // Allocate a temporary JsonDocument
   StaticJsonDocument<1280> doc;
-
-  // Deserialize the JSON document
   DeserializationError error = deserializeJson(doc, configFile);
   if (error) {
     Serial.println(F("Failed to read file, using default configuration in function loadConfiguration"));
   }
 
-  // Copy values from the JsonDocument to the Config
   config.port = doc["port"] | 8080;
   strlcpy(config.hostname,
           doc["hostname"] | "192.168.1.20",
@@ -95,7 +86,6 @@ void loadConfiguration(const char *filename, Config &config) {
 //***********************************
 //************* Gestion de la configuration - sauvegarde du fichier de configuration
 //***********************************
-
 void saveConfiguration(const char *filename, const Config &config) {
   File configFile = SPIFFS.open(filename_conf, "w");
   if (!configFile) {
@@ -138,25 +128,25 @@ void saveConfiguration(const char *filename, const Config &config) {
   doc["dimmer_max_percent"] = config.dimmerMaxPercent;
 
   if (serializeJson(doc, configFile) == 0) {
-    Serial.println(F("Failed to write to file in function Save configuration "));
+    Serial.println(F("Failed to write to file in function Save configuration"));
   }
 
   configFile.close();
 }
 
-///// config Wifi 
-
+//***********************************
+//************* Configuration Wi-Fi SPIFFS
+//***********************************
 const char *wifi_conf = "/wifi.json";
-extern Configwifi configwifi; 
+extern Configwifi configwifi;
 
 void loadwifi(const char *filename, Configwifi &configwifi) {
   File configFile = SPIFFS.open(wifi_conf, "r");
 
   StaticJsonDocument<512> doc;
-
   DeserializationError error = deserializeJson(doc, configFile);
   if (error) {
-    Serial.println(F("Failed to read wifi config, using default configuration in function config.h"));
+    Serial.println(F("Failed to read wifi config, using config.h fallback"));
   }
 
   strlcpy(configwifi.SID,
@@ -166,6 +156,32 @@ void loadwifi(const char *filename, Configwifi &configwifi) {
           doc["passwd"] | "xxx",
           sizeof(configwifi.passwd));
   configFile.close();
+}
+
+// A real SSID stored by the setup portal takes priority over compile-time
+// credentials. The historical "xxx" value remains the marker for "not set".
+bool hasStoredWifiCredentials(const Configwifi &wifi) {
+  return wifi.SID[0] != '\0' && strcmp(wifi.SID, "xxx") != 0;
+}
+
+bool savewifi(const char *filename, const Configwifi &wifi) {
+  File configFile = SPIFFS.open(wifi_conf, "w");
+  if (!configFile) {
+    Serial.println(F("Failed to open wifi config for writing"));
+    return false;
+  }
+
+  StaticJsonDocument<256> doc;
+  doc["SID"] = wifi.SID;
+  doc["passwd"] = wifi.passwd;
+
+  const bool ok = serializeJson(doc, configFile) > 0;
+  configFile.close();
+
+  if (!ok)
+    Serial.println(F("Failed to write wifi config"));
+
+  return ok;
 }
 
 #endif
