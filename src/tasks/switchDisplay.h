@@ -66,8 +66,11 @@ void switchDisplay(void * parameter){
         }
         else {
 #ifdef TTGO
-          // Short press: toggle family dashboard <-> diagnostic page.
-          gDisplayPage = (gDisplayPage == 0) ? 1 : 0;
+          // Short press cycles through:
+          //   0 = main dashboard
+          //   1 = diagnostics
+          //   2 = on-device legend / help
+          gDisplayPage = (gDisplayPage + 1) % 3;
           gDisplayForceRefresh = true;
 #endif
           screenOnSince = now;
