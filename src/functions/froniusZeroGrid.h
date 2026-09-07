@@ -2,7 +2,7 @@
 #define FRONIUS_ZERO_GRID_H
 
 // Fronius Zero Grid controller
-// V14.1 - asymmetric control: protect against grid import, smooth surplus capture
+// V14.2 - dynamic surplus ramp + asymmetric anti-import control
 // Positive P_Grid = import from grid
 // Negative P_Grid = export to grid
 
@@ -31,11 +31,16 @@
 #define DIMMER_IMPORT_RESERVE_W 25
 #define DIMMER_IMPORT_EMERGENCY_RESERVE_W 50
 
-// Surplus is captured progressively so delayed RobotDyn/Fronius feedback does
-// not create the large 20% -> 60% -> 20% oscillations seen in field logs.
-#define DIMMER_SURPLUS_FAST_W 200
-#define DIMMER_SURPLUS_STEP_PERCENT 8
+// Dynamic surplus capture. Large export should be absorbed quickly, while the
+// final approach to Zero Grid remains deliberately slow to avoid overshoot.
+// A lead limit prevents HTTP commands from running too far ahead of the power
+// actually reported by RobotDyn when its /state feedback is a little slower.
+#define DIMMER_SURPLUS_TURBO_W 300
+#define DIMMER_SURPLUS_MEDIUM_W 100
+#define DIMMER_SURPLUS_TURBO_STEP_PERCENT 20
+#define DIMMER_SURPLUS_MEDIUM_STEP_PERCENT 8
 #define DIMMER_SURPLUS_FINE_STEP_PERCENT 3
+#define DIMMER_SURPLUS_MAX_LEAD_PERCENT 30
 
 #define DIMMER_MIN_CHANGE 1
 #define DIMMER_HTTP_TIMEOUT_MS 500UL
@@ -223,19 +228,33 @@ void froniusZeroGridSimulation()
     else if (grid < gridLow) {
         // PV SURPLUS: increasing the dimmer increases consumption by about
         // 8 W per percentage point with the measured 800 W resistance.
-        // Capture it progressively to avoid overshoot into grid import.
+        // Large surplus gets a fast ramp; close to Zero Grid we keep small
+        // steps. rawTargetDimmer remains the physics-based upper objective.
         targetDimmer = max(rawTargetDimmer, requestedDimmer);
 
         const int surplusW = -grid;
-        const int maxStep =
-            surplusW >= DIMMER_SURPLUS_FAST_W
-                ? DIMMER_SURPLUS_STEP_PERCENT
-                : DIMMER_SURPLUS_FINE_STEP_PERCENT;
-        const int maxAllowed =
-            min(FRONIUS_MAX_DIMMER, requestedDimmer + maxStep);
+        int maxStep = DIMMER_SURPLUS_FINE_STEP_PERCENT;
 
-        if (targetDimmer > maxAllowed)
-            targetDimmer = maxAllowed;
+        if (surplusW >= DIMMER_SURPLUS_TURBO_W)
+            maxStep = DIMMER_SURPLUS_TURBO_STEP_PERCENT;
+        else if (surplusW >= DIMMER_SURPLUS_MEDIUM_W)
+            maxStep = DIMMER_SURPLUS_MEDIUM_STEP_PERCENT;
+
+        const int maxAllowedByStep =
+            min(FRONIUS_MAX_DIMMER, requestedDimmer + maxStep);
+        if (targetDimmer > maxAllowedByStep)
+            targetDimmer = maxAllowedByStep;
+
+        // RobotDyn feedback can lag the command by one or two control cycles.
+        // Allow a useful head start, but do not queue a large hidden increase
+        // that could suddenly turn into grid import when the dimmer catches up.
+        if (dimmerStateFresh) {
+            const int maxAllowedByFeedback =
+                min(FRONIUS_MAX_DIMMER,
+                    controlDimmer + DIMMER_SURPLUS_MAX_LEAD_PERCENT);
+            if (targetDimmer > maxAllowedByFeedback)
+                targetDimmer = maxAllowedByFeedback;
+        }
     }
     // Inside the target band, keep the last requested value. Do not chase
     // every Fronius watt with another HTTP command.
