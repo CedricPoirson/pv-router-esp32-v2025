@@ -1,6 +1,8 @@
 #ifndef CONFIG
 #define CONFIG
 
+#include "version.h"
+
 /**
  * Core features
  */
@@ -21,6 +23,8 @@
 
 /**
  * Fronius inverter / Smart Meter
+ *
+ * This branch uses the Fronius Solar API v1 PowerFlow endpoint over HTTP.
  */
 #define IP_FRONIUS "192.168.100.245"
 
@@ -36,7 +40,7 @@
 #define DEVICE_ID "pvrouter-esp32"
 #define DEVICE_MODEL "TTGO T-Display"
 #define DEVICE_MANUF "Cédric Poirson"
-#define DEVICE_VERSION "1.0"
+#define DEVICE_VERSION PV_ROUTER_FIRMWARE_VERSION
 #define HA_DISCOVERY_PREFIX "homeassistant"
 
 /**
@@ -47,7 +51,7 @@
 
 /**
  * Legacy temperature refresh setting.
- * The V13 RobotDyn /state task uses its own adaptive 2 s / 5 s polling.
+ * The current RobotDyn /state task uses its own adaptive 2 s / 5 s polling.
  */
 #define GETTEMPREFRESH 30
 
@@ -139,6 +143,7 @@
   #endif
 #endif
 
-#define VERSION "version 3.6"
+// Kept for legacy helpers that still print VERSION.
+#define VERSION PV_ROUTER_FIRMWARE_LABEL
 
 #endif
