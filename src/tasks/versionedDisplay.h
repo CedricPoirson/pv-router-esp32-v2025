@@ -5,8 +5,8 @@
 
 #ifdef TTGO
 
-// V14.4 display scheduler. A forced refresh means "draw now", not "blank the
-// whole TFT". Full-screen clears are reserved for real page transitions.
+// Versioned display scheduler. A forced refresh means "draw now", not "blank
+// the whole TFT". Full-screen clears are reserved for real page transitions.
 // This keeps the differential renderer effective even though gettemp.h asks
 // for an immediate refresh after RobotDyn updates.
 void updateDisplaySmoothV144(void * parameter)
@@ -36,18 +36,25 @@ void updateDisplaySmoothV144(void * parameter)
       if (page == 0) {
         drawTTGOSmoothDashboard(fullRedraw);
       }
-      else {
+      else if (page == 1) {
         drawTTGOSmoothDiagnostic(fullRedraw);
 
-        // Replace the historical V13 diagnostic title with the actual
-        // firmware version. The regulation version remains V14.3 and is shown
-        // separately on boot/Web diagnostics.
+        // Replace the historical diagnostic title with the actual firmware
+        // version. The regulation version remains separate.
         if (fullRedraw) {
           display.fillRect(0, 0, 240, 18, TFT_BLACK);
           drawCenteredTTGO(String("DIAG ") + PV_ROUTER_FIRMWARE_LABEL,
                            1, 2, TFT_CYAN);
           display.drawFastHLine(0, 18, 240, TFT_DARKGREY);
         }
+      }
+      else if (page == 2) {
+        // Help is a static page: draw it once when entering the page and then
+        // leave it untouched. Previously page 2 fell through to diagnostics,
+        // which immediately overwrote the help screen and made it appear only
+        // as a brief flash.
+        if (fullRedraw)
+          drawTTGOHelpPage();
       }
 
       lastDrawMs = now;
