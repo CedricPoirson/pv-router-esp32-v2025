@@ -13,6 +13,12 @@
 #include <Wire.h>  // Only needed for Arduino 1.6.5 and earlier
 #include <ArduinoJson.h> // ArduinoJson : https://github.com/bblanchon/ArduinoJson
 
+// SPIFFS helpers are intentionally included before the Wi-Fi tasks so the
+// reconnect path and the physical-button setup portal share the same stored
+// credential helpers.
+#include "functions/spiffsFunctions.h"
+#include "functions/wifiSetupPortal.h"
+
 #include "tasks/updateDisplay.h"
 #include "tasks/smoothDisplay.h"
 #include "tasks/versionedDisplay.h"
@@ -28,7 +34,6 @@
 #include "tasks/gettemp.h"
 
 #include "functions/otaFunctions.h"
-#include "functions/spiffsFunctions.h"
 #include "functions/Mqtt_http_Functions.h"
 #include "functions/webFunctions.h"
 
@@ -92,6 +97,15 @@ void setup()
       display.init();
       display.setRotation(1);
       drawTTGOGraphicalBootScreen("DEMARRAGE", "Initialisation materiel", 15);
+
+      // Physical setup entry point: the access point is never exposed merely
+      // because the home Wi-Fi is unavailable. It requires a deliberate
+      // three-second button hold during power-up/reboot.
+      if (wifiSetupRequestedAtBoot()) {
+        runWifiSetupPortal();
+      }
+
+      drawTTGOGraphicalBootScreen("DEMARRAGE", "Configuration Wi-Fi normale", 25);
     #endif
   #endif
 
@@ -100,27 +114,37 @@ void setup()
       drawTTGOGraphicalBootScreen("CONNEXION WI-FI", "Connexion au reseau local", 35);
     #endif
 
-    if (strcmp(WIFI_PASSWORD, "xxx") == 0) {
-      WiFi.begin(configwifi.SID, configwifi.passwd);
-    }
-    else {
-      WiFi.begin(WIFI_NETWORK, WIFI_PASSWORD);
-    }
+    beginConfiguredWiFi();
+    const unsigned long firstWifiAttempt = millis();
 
-    while (WiFi.status() != WL_CONNECTED) {
-      delay(500);
+    while (WiFi.status() != WL_CONNECTED &&
+           millis() - firstWifiAttempt < WIFI_TIMEOUT) {
+      delay(250);
       Serial.print(".");
     }
-    serial_println("WiFi connected");
-    serial_println("IP address: ");
-    serial_println(WiFi.localIP());
-    gDisplayValues.currentState = UP;
-    gDisplayValues.IP = String(WiFi.localIP().toString());
-    btStop();
 
-    #ifdef TTGO
-      drawTTGOGraphicalBootScreen("WI-FI OK", gDisplayValues.IP, 60);
-    #endif
+    if (WiFi.status() == WL_CONNECTED) {
+      serial_println("WiFi connected");
+      serial_println("IP address: ");
+      serial_println(WiFi.localIP());
+      gDisplayValues.currentState = UP;
+      gDisplayValues.IP = String(WiFi.localIP().toString());
+      btStop();
+
+      #ifdef TTGO
+        drawTTGOGraphicalBootScreen("WI-FI OK", gDisplayValues.IP, 60);
+      #endif
+    }
+    else {
+      serial_println("[WIFI] Initial connection failed; background retries enabled");
+      gDisplayValues.currentState = CONNECTING_WIFI;
+      gDisplayValues.IP = "OFFLINE";
+
+      #ifdef TTGO
+        drawTTGOGraphicalBootScreen("WI-FI INDISPONIBLE", "Boot + bouton 3 s = config", 60);
+        delay(1300);
+      #endif
+    }
   #endif
 
   #if DIMMERLOCAL
@@ -297,7 +321,11 @@ void setup()
   #endif
 
   #ifdef TTGO
-    drawTTGOGraphicalBootScreen("PRET", "Fronius - RobotDyn - MQTT", 100);
+    if (WiFi.status() == WL_CONNECTED)
+      drawTTGOGraphicalBootScreen("PRET", "Fronius - RobotDyn - MQTT", 100);
+    else
+      drawTTGOGraphicalBootScreen("WI-FI EN ATTENTE", "Bouton 3 s au boot = config", 100);
+
     delay(550);
     gDisplayBootComplete = true;
     gDisplayForceRefresh = true;
