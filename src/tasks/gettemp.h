@@ -39,7 +39,6 @@ void GetDImmerTemp(void * parameter){
 
       if (httpResponseCode == HTTP_CODE_OK) {
         const String payload = httpdimmer.getString();
-        Serial.printf("[DIMMER JSON] %s\n", payload.c_str());
         StaticJsonDocument<1024> doc;
         const DeserializationError error = deserializeJson(doc, payload);
 
@@ -48,18 +47,13 @@ void GetDImmerTemp(void * parameter){
           gDisplayValues.dimmerCommandReported = constrain(doc["commande"] | 0, 0, 100);
 
           String ecsTemp = "";
-
           if (doc["dallas0"].is<const char*>()) {
             ecsTemp = doc["dallas0"].as<String>();
           }
           else if (doc["temperature"].is<const char*>()) {
             ecsTemp = doc["temperature"].as<String>();
           }
-
           gDisplayValues.temperature = ecsTemp;
-
-          Serial.printf("[DIMMER TEMP PARSED] %s\n",
-                        gDisplayValues.temperature.c_str());
 
           gDisplayValues.dimmerPower = doc["power"] | 0.0f;
           gDisplayValues.dimmerPtotal = doc["Ptotal"] | 0.0f;
