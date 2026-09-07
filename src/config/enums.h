@@ -76,6 +76,14 @@ struct Config {
   bool polarity;
   char Publish[100];
   int ScreenTime;
+
+  // V14.3 runtime settings exposed by the local Web UI. They are kept
+  // separate from the legacy fields above so an old config.json can still be
+  // loaded unchanged; missing keys receive safe V14.3 defaults.
+  int heaterPowerW;
+  int gridTargetW;
+  int gridDeadbandW;
+  int dimmerMaxPercent;
 };
 
 struct Configwifi {
