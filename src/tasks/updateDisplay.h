@@ -257,14 +257,18 @@ static void drawTTGOZeroGridDashboard()
   const int heaterPower = (800 * reportedDimmer) / 100;
   const int grid = (int)gDisplayValues.grid;
   const float waterTemp = gDisplayValues.temperature.toFloat();
+  const int effectiveMaxTemp =
+      gDisplayValues.dimmerMaxTemp > 0
+          ? gDisplayValues.dimmerMaxTemp
+          : config.tmax;
 
   int housePower = (int)gDisplayValues.production + grid;
   if (housePower < 0) housePower = 0;
 
   const bool tempAtOrAboveMax =
       (waterTemp > 0.0f) &&
-      (config.tmax > 0) &&
-      (waterTemp >= (float)config.tmax);
+      (effectiveMaxTemp > 0) &&
+      (waterTemp >= (float)effectiveMaxTemp);
 
   const bool heaterAtTempLimit =
       dimmerFresh &&
@@ -316,21 +320,12 @@ static void drawTTGOZeroGridDashboard()
   const int tempColor = tempAtOrAboveMax ? TFT_ORANGE : TFT_CYAN;
   drawThermometerIcon(59, 1, tempColor);
   display.setTextColor(tempAtOrAboveMax ? TFT_ORANGE : TFT_WHITE, TFT_BLACK);
-  if (waterTemp > 0.0f) {
-    String tempText = String(waterTemp, 1);
-    const int tempX = 73;
-    display.setCursor(tempX, 2, 2);
-    display.print(tempText);
-    const int tempWidth = display.textWidth(tempText, 2);
-    display.drawCircle(tempX + tempWidth + 3, 4, 1,
-                       tempAtOrAboveMax ? TFT_ORANGE : TFT_WHITE);
-    display.setCursor(tempX + tempWidth + 7, 2, 2);
-    display.print("C");
-  }
-  else {
-    display.setCursor(73, 2, 2);
-    display.print("--.- C");
-  }
+  String tempText = waterTemp > 0.0f ? String(waterTemp, 1) : "--.-";
+  tempText += "/";
+  tempText += effectiveMaxTemp > 0 ? String(effectiveMaxTemp) : "--";
+  tempText += "C";
+  display.setCursor(73, 2, 2);
+  display.print(tempText);
 
   const int ceIconX = 158;
   const int ceTextX = 174;
@@ -502,13 +497,22 @@ static void drawTTGODiagnosticPage()
                         dimmerFresh ? TFT_GREEN : TFT_RED);
 
   const float waterTemp = gDisplayValues.temperature.toFloat();
-  const String temperatureText = String(config.tmax) + "C / " +
-                                 String(waterTemp, 1) + "C";
+  const int effectiveMaxTemp =
+      gDisplayValues.dimmerMaxTemp > 0
+          ? gDisplayValues.dimmerMaxTemp
+          : config.tmax;
+  String temperatureText =
+      waterTemp > 0.0f ? String(waterTemp, 1) + "C" : "--.-C";
+  temperatureText += " / ";
+  temperatureText +=
+      effectiveMaxTemp > 0 ? String(effectiveMaxTemp) + "C" : "--C";
   const int tempColor =
-      (waterTemp > 0.0f && config.tmax > 0 && waterTemp >= config.tmax)
+      (waterTemp > 0.0f &&
+       effectiveMaxTemp > 0 &&
+       waterTemp >= effectiveMaxTemp)
           ? TFT_ORANGE
           : TFT_WHITE;
-  drawDiagnosticRowTTGO("Tmax/Eau", temperatureText, 102, tempColor);
+  drawDiagnosticRowTTGO("Eau/Tmax", temperatureText, 102, tempColor);
   drawDiagnosticRowTTGO("Uptime", formatUptimeTTGO(now), 118, TFT_WHITE);
 }
 
