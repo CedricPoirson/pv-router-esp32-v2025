@@ -322,12 +322,22 @@ static void drawPowerGaugeTTGO(int watts, bool valid)
   display.print("kW");
 }
 
-static void drawTTGOZeroGridDashboard()
+static void drawTTGOZeroGridDashboard(bool fullRedraw)
 {
-  display.fillScreen(TFT_BLACK);
+  // The old implementation cleared all 32,400 pixels before every refresh.
+  // That blank frame was visible on the ST7789 as a periodic flash. Keep a
+  // full clear only for page transitions; normal updates erase only the small
+  // dynamic zones whose text/icons may have changed.
+  if (!fullRedraw) {
+    display.fillRect(0, 0, 240, 19, TFT_BLACK);    // clock / temp / CE state
+    display.fillRect(0, 68, 240, 38, TFT_BLACK);  // PV/grid + CE/house row
+    display.fillRect(0, 106, 240, 10, TFT_BLACK); // previous gauge cursor head
+  }
   display.setTextSize(1);
 
   if (gDisplayValues.currentState != UP) {
+    if (!fullRedraw)
+      display.fillRect(0, 19, 240, 116, TFT_BLACK);
     drawCenteredTTGO("NO WIFI", 48, 4, TFT_RED);
     return;
   }
@@ -618,9 +628,12 @@ static void drawTTGOZeroGridDashboard()
   drawPowerGaugeTTGO(gaugePower, gDisplayValues.froniusup);
 }
 
-static void drawTTGODiagnosticPage()
+static void drawTTGODiagnosticPage(bool fullRedraw)
 {
-  display.fillScreen(TFT_BLACK);
+  // Keep the static labels/header in place. Only the right-hand values are
+  // erased during a normal refresh, avoiding another full-screen black flash.
+  if (!fullRedraw)
+    display.fillRect(78, 20, 162, 115, TFT_BLACK);
   display.setTextSize(1);
 
   drawCenteredTTGO("DIAGNOSTIC V13", 1, 2, TFT_CYAN);
@@ -711,6 +724,7 @@ static void drawTTGODiagnosticPage()
 void updateDisplay(void * parameter){
 #ifdef TTGO
   unsigned long lastDrawMs = 0;
+  uint8_t lastPage = 255;
 #endif
 
   for (;;){
@@ -725,10 +739,19 @@ void updateDisplay(void * parameter){
         (unsigned long)(now - lastDrawMs) >= 2000UL) {
       gDisplayForceRefresh = false;
 
-      if (gDisplayPage == 0)
-        drawTTGOZeroGridDashboard();
+      // Clear the complete panel only when changing pages (or on the first
+      // dashboard draw after boot). The 2 s refresh path stays partial.
+      const uint8_t page = gDisplayPage;
+      const bool fullRedraw = (page != lastPage);
+      if (fullRedraw) {
+        display.fillScreen(TFT_BLACK);
+        lastPage = page;
+      }
+
+      if (page == 0)
+        drawTTGOZeroGridDashboard(fullRedraw);
       else
-        drawTTGODiagnosticPage();
+        drawTTGODiagnosticPage(fullRedraw);
 
       lastDrawMs = now;
     }
