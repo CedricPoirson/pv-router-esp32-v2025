@@ -21,7 +21,7 @@ extern volatile bool gDisplayForceRefresh;
 #define DIMMER_STATE_HTTP_TIMEOUT_MS    500UL
 #define DIMMER_CONFIG_POLL_MS          30000UL
 #define DIMMER_CONFIG_RETRY_MS         10000UL
-#define DIMMER_ECS_HYSTERESIS_C            2.0f
+#define DIMMER_ECS_FALLBACK_HYSTERESIS_C   2.0f
 
 void GetDImmerTemp(void * parameter){
   (void)parameter;
@@ -31,10 +31,15 @@ void GetDImmerTemp(void * parameter){
   bool configKnown = false;
   unsigned long lastConfigAttemptMs = 0;
 
+  // -1 means the RobotDyn trigger has not been read yet. The normal path uses
+  // the exact RobotDyn percentage hysteresis. The former fixed 2 C hysteresis
+  // is kept only as a conservative fallback while /config is unavailable.
+  gDisplayValues.dimmerTriggerPercent = -1;
+  gDisplayValues.dimmerReleaseTemp = 0.0f;
+
   // Local ECS temperature latch. Once the maximum is reached, routing remains
-  // stopped until the water has cooled DIMMER_ECS_HYSTERESIS_C below the
-  // current RobotDyn maxtemp. This also lets a raised maxtemp release an old
-  // RobotDyn temperature alert as soon as the new configuration is observed.
+  // stopped until the water has cooled to the same release threshold used by
+  // RobotDyn: maxtemp - (maxtemp * trigger / 100).
   bool ecsTempLimitActive = false;
   bool previousIgnoredRemoteTempAlarm = false;
   bool previousOtherRemoteAlarm = false;
@@ -46,9 +51,10 @@ void GetDImmerTemp(void * parameter){
     bool currentLinkOk = false;
     String errorReason = "unknown";
 
-    // /config contains the real normal ECS maximum temperature (maxtemp).
-    // Poll it once at startup, retry reasonably fast until it succeeds, then
-    // refresh every 30 seconds so a user setpoint change is picked up quickly.
+    // /config contains the real normal ECS maximum temperature (maxtemp) and
+    // RobotDyn thermal hysteresis (trigger). Poll it once at startup, retry
+    // reasonably fast until it succeeds, then refresh every 30 seconds so a
+    // user setpoint/trigger change is picked up quickly.
     const unsigned long configInterval =
         configKnown ? DIMMER_CONFIG_POLL_MS : DIMMER_CONFIG_RETRY_MS;
 
@@ -71,18 +77,52 @@ void GetDImmerTemp(void * parameter){
 
           if (!configError && configDoc.containsKey("maxtemp")) {
             const int remoteMaxTemp = configDoc["maxtemp"] | 0;
+            const int remoteTrigger =
+                configDoc.containsKey("trigger")
+                    ? (configDoc["trigger"] | -1)
+                    : -1;
+            const bool triggerValid =
+                remoteTrigger >= 0 && remoteTrigger <= 100;
 
             if (remoteMaxTemp > 0 && remoteMaxTemp <= 100) {
-              const bool changed =
+              const bool maxChanged =
                   gDisplayValues.dimmerMaxTemp != remoteMaxTemp;
+              const bool triggerChanged =
+                  triggerValid &&
+                  gDisplayValues.dimmerTriggerPercent != remoteTrigger;
               const bool firstValidConfig = !configKnown;
 
               gDisplayValues.dimmerMaxTemp = remoteMaxTemp;
+              if (triggerValid)
+                gDisplayValues.dimmerTriggerPercent = remoteTrigger;
+
+              const bool triggerKnown =
+                  gDisplayValues.dimmerTriggerPercent >= 0;
+              float releaseTemp =
+                  (float)gDisplayValues.dimmerMaxTemp -
+                  DIMMER_ECS_FALLBACK_HYSTERESIS_C;
+              if (triggerKnown) {
+                releaseTemp =
+                    (float)gDisplayValues.dimmerMaxTemp -
+                    ((float)gDisplayValues.dimmerMaxTemp *
+                     (float)gDisplayValues.dimmerTriggerPercent / 100.0f);
+              }
+              if (releaseTemp < 0.0f) releaseTemp = 0.0f;
+              gDisplayValues.dimmerReleaseTemp = releaseTemp;
               configKnown = true;
 
-              if (firstValidConfig || changed) {
-                Serial.printf("[DIMMER] CONFIG OK MAX=%d C\n",
-                              gDisplayValues.dimmerMaxTemp);
+              if (firstValidConfig || maxChanged || triggerChanged) {
+                if (triggerKnown) {
+                  Serial.printf("[DIMMER] CONFIG OK MAX=%d C TRIGGER=%d%% RELEASE=%.2f C\n",
+                                gDisplayValues.dimmerMaxTemp,
+                                gDisplayValues.dimmerTriggerPercent,
+                                gDisplayValues.dimmerReleaseTemp);
+                }
+                else {
+                  Serial.printf("[DIMMER] CONFIG OK MAX=%d C TRIGGER=-- RELEASE=%.1f C (fallback)\n",
+                                gDisplayValues.dimmerMaxTemp,
+                                gDisplayValues.dimmerReleaseTemp);
+                }
               }
             }
           }
@@ -145,8 +185,17 @@ void GetDImmerTemp(void * parameter){
                   : config.tmax;
           const bool temperatureKnown =
               waterTemp > 0.0f && effectiveMaxTemp > 0;
-          const float releaseTemp =
-              (float)effectiveMaxTemp - DIMMER_ECS_HYSTERESIS_C;
+
+          float releaseTemp =
+              (float)effectiveMaxTemp - DIMMER_ECS_FALLBACK_HYSTERESIS_C;
+          if (gDisplayValues.dimmerTriggerPercent >= 0) {
+            releaseTemp =
+                (float)effectiveMaxTemp -
+                ((float)effectiveMaxTemp *
+                 (float)gDisplayValues.dimmerTriggerPercent / 100.0f);
+          }
+          if (releaseTemp < 0.0f) releaseTemp = 0.0f;
+          gDisplayValues.dimmerReleaseTemp = releaseTemp;
 
           const bool previousTempLimit = ecsTempLimitActive;
 
@@ -154,7 +203,8 @@ void GetDImmerTemp(void * parameter){
             if (!ecsTempLimitActive) {
               // A local threshold crossing always latches the stop. If the
               // RobotDyn itself reports a temperature alarm close to Tmax,
-              // latch it too and require the same hysteresis before restart.
+              // latch it too and require the same RobotDyn trigger threshold
+              // before restart.
               if (waterTemp >= (float)effectiveMaxTemp ||
                   (remoteTemperatureAlarm && waterTemp > releaseTemp)) {
                 ecsTempLimitActive = true;
@@ -176,10 +226,11 @@ void GetDImmerTemp(void * parameter){
                           effectiveMaxTemp);
           }
           else if (previousTempLimit && !ecsTempLimitActive) {
-            Serial.printf("[DIMMER] ECS TEMP RELEASED %.1f C (MAX=%d C, restart<=%.1f C)\n",
+            Serial.printf("[DIMMER] ECS TEMP RELEASED %.1f C (MAX=%d C, restart<=%.2f C, trigger=%d%%)\n",
                           waterTemp,
                           effectiveMaxTemp,
-                          releaseTemp);
+                          releaseTemp,
+                          gDisplayValues.dimmerTriggerPercent);
           }
 
           const bool ignoredRemoteTemperatureAlarm =
@@ -189,7 +240,7 @@ void GetDImmerTemp(void * parameter){
 
           if (ignoredRemoteTemperatureAlarm &&
               !previousIgnoredRemoteTempAlarm) {
-            Serial.printf("[DIMMER] STALE TEMP ALARM IGNORED %.1f C < restart %.1f C (MAX=%d C)\n",
+            Serial.printf("[DIMMER] STALE TEMP ALARM IGNORED %.1f C < restart %.2f C (MAX=%d C)\n",
                           waterTemp,
                           releaseTemp,
                           effectiveMaxTemp);
@@ -210,7 +261,8 @@ void GetDImmerTemp(void * parameter){
               otherRemoteAlarm ? gDisplayValues.dimmerAlert : "";
 
           // Any non-temperature RobotDyn alarm remains an unconditional
-          // fail-safe. Temperature protection uses the local hysteresis latch.
+          // fail-safe. Temperature protection uses the local latch aligned to
+          // the RobotDyn trigger whenever it is available.
           gDisplayValues.dimmerAlarm =
               otherRemoteAlarm || ecsTempLimitActive;
 
@@ -225,14 +277,29 @@ void GetDImmerTemp(void * parameter){
                               : DIMMER_STATE_POLL_CATCHUP_MS;
 
           if (!linkStateKnown || !previousLinkOk) {
-            Serial.printf("[DIMMER] LINK OK ACTUAL=%d%% CMD=%d%% TEMP=%s C MAX=%d C RSSI=%d\n",
-                          gDisplayValues.dimmerReported,
-                          gDisplayValues.dimmerCommandReported,
-                          gDisplayValues.temperature.length() > 0
-                              ? gDisplayValues.temperature.c_str()
-                              : "--.-",
-                          effectiveMaxTemp,
-                          gDisplayValues.dimmerRssi);
+            if (gDisplayValues.dimmerTriggerPercent >= 0) {
+              Serial.printf("[DIMMER] LINK OK ACTUAL=%d%% CMD=%d%% TEMP=%s C MAX=%d C TRIGGER=%d%% RELEASE=%.2f C RSSI=%d\n",
+                            gDisplayValues.dimmerReported,
+                            gDisplayValues.dimmerCommandReported,
+                            gDisplayValues.temperature.length() > 0
+                                ? gDisplayValues.temperature.c_str()
+                                : "--.-",
+                            effectiveMaxTemp,
+                            gDisplayValues.dimmerTriggerPercent,
+                            releaseTemp,
+                            gDisplayValues.dimmerRssi);
+            }
+            else {
+              Serial.printf("[DIMMER] LINK OK ACTUAL=%d%% CMD=%d%% TEMP=%s C MAX=%d C RELEASE=%.1f C(fallback) RSSI=%d\n",
+                            gDisplayValues.dimmerReported,
+                            gDisplayValues.dimmerCommandReported,
+                            gDisplayValues.temperature.length() > 0
+                                ? gDisplayValues.temperature.c_str()
+                                : "--.-",
+                            effectiveMaxTemp,
+                            releaseTemp,
+                            gDisplayValues.dimmerRssi);
+            }
           }
         }
         else {
@@ -255,7 +322,8 @@ void GetDImmerTemp(void * parameter){
 
     if (!currentLinkOk) {
       // Never keep displaying a stale live temperature. Keep the last valid
-      // maxtemp from /config: it is configuration data, not a live reading.
+      // maxtemp/trigger from /config: they are configuration data, not live
+      // measurements.
       gDisplayValues.temperature = "";
     }
 
