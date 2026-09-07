@@ -86,29 +86,17 @@ void setup()
 
     #ifdef TTGO
       pinMode(SWITCH, INPUT);
-
       display.init();
       display.setRotation(1);
-      display.fillScreen(TFT_BLACK);
-      display.setCursor(0, 0, 2);
-      display.setTextColor(TFT_WHITE, TFT_BLACK);
-      display.setTextSize(1);
-      display.println(BOOTING);
-      if (strcmp(WIFI_PASSWORD, "xxx") == 0) {
-        if (strcmp(configwifi.SID, "xxx") == 0) {
-          display.println(WIFINO);
-        }
-        else {
-          display.println(WIFICONNECT + String(configwifi.SID));
-        }
-      }
-      else {
-        display.println(WIFICONNECT WIFI_NETWORK);
-      }
+      drawTTGOBootScreen("DEMARRAGE", "Initialisation materiel", 15);
     #endif
   #endif
 
   #if WIFI_ACTIVE == true
+    #ifdef TTGO
+      drawTTGOBootScreen("CONNEXION WI-FI", "Connexion au reseau local", 35);
+    #endif
+
     if (strcmp(WIFI_PASSWORD, "xxx") == 0) {
       WiFi.begin(configwifi.SID, configwifi.passwd);
     }
@@ -126,6 +114,10 @@ void setup()
     gDisplayValues.currentState = UP;
     gDisplayValues.IP = String(WiFi.localIP().toString());
     btStop();
+
+    #ifdef TTGO
+      drawTTGOBootScreen("WI-FI OK", gDisplayValues.IP, 60);
+    #endif
   #endif
 
   #if DIMMERLOCAL
@@ -144,8 +136,16 @@ void setup()
   //***********************************
   //************* Setup - récupération du fichier de configuration
   //***********************************
+  #ifdef TTGO
+    drawTTGOBootScreen("CONFIGURATION", "Lecture config.json", 75);
+  #endif
+
   Serial.println(F("Loading configuration..."));
   loadConfiguration(filename_conf, config);
+
+  #ifdef TTGO
+    drawTTGOBootScreen("CONFIGURATION OK", "Demarrage des services", 82);
+  #endif
 
   // Initialize Dimmer State
   gDisplayValues.dimmer = 0;
@@ -157,6 +157,9 @@ void setup()
       //***********************************
       Serial.println("start Web server");
       call_pages();
+      #ifdef TTGO
+        drawTTGOBootScreen("SERVEUR WEB OK", gDisplayValues.IP, 90);
+      #endif
     #endif
 
     // TASK: Connect to WiFi & keep the connection alive.
@@ -288,6 +291,13 @@ void setup()
       gDisplayValues.dimmer = 0;
       dimmer_change(config.dimmer, config.IDXdimmer, gDisplayValues.dimmer);
     }
+  #endif
+
+  #ifdef TTGO
+    drawTTGOBootScreen("PRET", "Fronius - RobotDyn - MQTT", 100);
+    delay(550);
+    gDisplayBootComplete = true;
+    gDisplayForceRefresh = true;
   #endif
 
   #if OLED_ON == true
