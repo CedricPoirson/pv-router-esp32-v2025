@@ -1,5 +1,7 @@
 # PV Router ESP32 / TTGO T-Display — Fronius Zero Grid + RobotDyn
 
+🇫🇷 **Français — ce fichier** | 🇬🇧 **[English documentation](./README_EN.md)**
+
 Routeur de surplus photovoltaïque pour **ESP32 / TTGO T-Display**, basé sur la mesure temps réel d'un **Fronius + Smart Meter** et le pilotage HTTP d'un **dimmer Wi-Fi RobotDyn** alimentant un chauffe-eau résistif.
 
 Le but est de consommer localement le surplus PV tout en restant au plus près de zéro au point de livraison, avec un léger biais volontaire vers l'export pour limiter les micro-imports lors des variations rapides de charge ou de production.
@@ -11,6 +13,28 @@ Le but est de consommer localement le surplus PV tout en restant au plus près d
 > **Dimmer RobotDyn testé : firmware `Version 20260514`**
 
 ![Routeur TTGO](./img/routeur.jpg)
+
+---
+
+## Origine, crédits et remerciements
+
+Ce projet est une **adaptation et une évolution du PV Router ESP32 de xlyric / C_Lyric** :
+
+- projet PV Router d'origine : https://github.com/xlyric/pv-router-esp32
+- auteur / mainteneur amont : **xlyric / C_Lyric**
+- communauté associée au projet d'origine : **APPER**
+
+Un grand merci à **xlyric / C_Lyric** pour avoir publié et maintenu ce travail en open source, ainsi qu'aux contributeurs de la communauté APPER. Ce dépôt n'aurait pas existé sous cette forme sans cette base.
+
+Cette branche utilise également le projet dimmer Wi-Fi du même auteur :
+
+- **PV-discharge-Dimmer-AC-Dimmer-KIT-Robotdyn** : https://github.com/xlyric/PV-discharge-Dimmer-AC-Dimmer-KIT-Robotdyn
+
+Le dimmer utilisé ici est un **RobotDyn / D1 mini** piloté par HTTP. Le firmware RobotDyn validé avec cette branche est `Version 20260514`.
+
+Cette adaptation diverge volontairement du routeur d'origine sur plusieurs points importants : la **source de vérité de la régulation est désormais le Fronius Smart Meter via Fronius Solar API v1**, la boucle active n'utilise plus le SCT013 comme mesure principale, la régulation Zero Grid est devenue prédictive, et l'interface Web / l'affichage TTGO ont été largement retravaillés.
+
+> Ce dépôt est une adaptation personnelle du projet amont ; il ne doit pas être présenté comme une version officielle publiée par xlyric ou par l'association APPER.
 
 ---
 
@@ -115,9 +139,9 @@ signifie environ 4,8 kW de production et 1,2 kW exportés.
 ### Cadence Fronius
 
 ```text
-Lecture PowerFlow     : toutes les 1,5 s
-Timeout HTTP          : 700 ms
-Donnée considérée stale : après 4 s
+Lecture PowerFlow         : toutes les 1,5 s
+Timeout HTTP              : 700 ms
+Donnée considérée stale   : après 4 s
 ```
 
 Chaque mesure Fronius validée incrémente un compteur d'échantillon. La régulation ne prend **qu'une décision par nouvel échantillon validé**, ce qui évite de recalculer plusieurs fois à partir de la même donnée.
@@ -430,9 +454,9 @@ Le JSON expose notamment :
 
 ```text
 version / firmware_version = V14.4
-fronius_api               = Solar API v1
-fronius_powerflow_path    = /solar_api/v1/GetPowerFlowRealtimeData.fcgi
-regulation.version        = V14.3
+fronius_api                 = Solar API v1
+fronius_powerflow_path      = /solar_api/v1/GetPowerFlowRealtimeData.fcgi
+regulation.version          = V14.3
 ```
 
 ainsi que PV, réseau, maison, chauffe-eau, ECS, RobotDyn, MQTT, uptime et mémoire.
