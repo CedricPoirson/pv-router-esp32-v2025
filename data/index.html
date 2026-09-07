@@ -93,6 +93,7 @@
 <script>
   const $=id=>document.getElementById(id);
   const fmtW=w=>{w=Number(w||0);const a=Math.abs(w);return a>=1000?(a/1000).toFixed(2)+' kW':Math.round(a)+' W'};
+  const fmtAxisW=w=>{w=Number(w||0);if(w===0)return '0 W';const sign=w>0?'+':'-',a=Math.abs(w);if(a>=1000){const digits=a%1000===0?0:1;return sign+(a/1000).toFixed(digits)+' kW'}return sign+Math.round(a)+' W'};
   const signedW=w=>{w=Number(w||0);return (w>0?'+':'')+Math.round(w)+' W'};
   const age=ms=>ms==null?'jamais':ms<1000?'< 1 s':(ms/1000).toFixed(ms<10000?1:0)+' s';
   const uptime=s=>{s=Number(s||0);const d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60);return d?`${d}j ${h}h`:`${h}h ${m}m`};
@@ -119,7 +120,7 @@
     canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
     const ctx=canvas.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
     const L=48,R=10,T=10,B=25,pw=w-L-R,ph=h-T-B;
-    ctx.font='11px -apple-system,BlinkMacSystemFont,Segoe UI,Arial';ctx.fillStyle='#93a4bd';ctx.strokeStyle='#ffffff12';ctx.lineWidth=1;
+    ctx.font='11px -apple-system,BlinkMacSystemFont,Segoe UI,Arial';ctx.fillStyle='#93a4bd';ctx.lineWidth=1;
     if(history.length<2){ctx.fillText('Historique en cours de constitution…',L,T+20);return;}
     const now=Date.now(),start=Math.max(now-HISTORY_MS,history[0].t);
     let minY=Math.min(-500,...history.map(p=>p.grid));
@@ -127,7 +128,8 @@
     minY=Math.floor(minY/500)*500;maxY=Math.ceil(maxY/500)*500;if(maxY-minY<1000)maxY=minY+1000;
     const x=t=>L+((t-start)/Math.max(1,now-start))*pw;
     const y=v=>T+(maxY-v)/(maxY-minY)*ph;
-    [minY,0,maxY].forEach(v=>{const yy=y(v);ctx.beginPath();ctx.moveTo(L,yy);ctx.lineTo(w-R,yy);ctx.stroke();ctx.fillStyle='#93a4bd';ctx.fillText(v===0?'0 W':fmtW(v),4,yy+4)});
+    [minY,maxY].forEach(v=>{const yy=y(v);ctx.beginPath();ctx.moveTo(L,yy);ctx.lineTo(w-R,yy);ctx.strokeStyle='#ffffff12';ctx.lineWidth=1;ctx.stroke();ctx.fillStyle='#93a4bd';ctx.fillText(fmtAxisW(v),4,yy+4)});
+    const zeroY=y(0);ctx.beginPath();ctx.moveTo(L,zeroY);ctx.lineTo(w-R,zeroY);ctx.strokeStyle='#ffffff55';ctx.lineWidth=1.5;ctx.stroke();ctx.fillStyle='#c4cedd';ctx.fillText('0 W',4,zeroY+4);
     ctx.fillStyle='#93a4bd';ctx.fillText('début',L,h-6);ctx.fillText('maintenant',w-R-58,h-6);
     function series(key,color){ctx.beginPath();let started=false;for(const p of history){if(p.t<start)continue;const xx=x(p.t),yy=y(p[key]);if(!started){ctx.moveTo(xx,yy);started=true}else ctx.lineTo(xx,yy)}ctx.strokeStyle=color;ctx.lineWidth=2;ctx.stroke()}
     series('pv','#45d483');series('heater','#ffb347');
@@ -141,7 +143,7 @@
     const g=Number(d.grid_w||0);if(g>20){$('grid').textContent=fmtW(g);$('grid').className='value red';$('gridMode').textContent='Import réseau';}else if(g<-20){$('grid').textContent=fmtW(g);$('grid').className='value cyan';$('gridMode').textContent='Export réseau';}else{$('grid').textContent='0 W';$('grid').className='value green';$('gridMode').textContent='Zero Grid';}
     let heroBg='var(--cyan)',heroText='#071216',heroLabel='ZERO GRID',heroValue=fmtW(d.available_w),note='Réseau proche de zéro';if(g>20){heroBg='var(--red)';heroText='#fff';heroLabel='IMPORT';heroValue=fmtW(g);note='Consommation depuis le réseau';}else if(Number(d.available_w)>2000){heroBg='var(--green)';heroText='#07120c';heroLabel='DISPO';heroValue=fmtW(d.available_w);note='Surplus PV disponible, chauffe-eau inclus';}else if(Number(d.available_w)>20){heroBg='var(--orange)';heroText='#1b1307';heroLabel='DISPO';heroValue=fmtW(d.available_w);note='Surplus PV disponible';}$('hero').style.background=heroBg;$('hero').style.color=heroText;$('heroLabel').textContent=heroLabel;$('heroValue').textContent=heroValue;$('heroState').textContent=d.status;$('heroNote').textContent=note;
     const gaugeValue=g>20?-g:Number(d.available_w||0);$('marker').style.left=markerFor(gaugeValue);
-    const r=d.regulation||{target_w:-15,low_w:-25,high_w:-5,correction_w:-15-g,heater_model_w:800};$('target').textContent=signedW(r.target_w);$('band').textContent=`${r.low_w} … ${r.high_w} W`;$('gridMeasured').textContent=signedW(g);$('correction').textContent=signedW(r.correction_w);$('regCmdActual').textContent=`${d.dimmer.cmd}% / ${d.dimmer.actual}%`;$('heaterModel').textContent=`${r.heater_model_w||800} W`;
+    const r=d.regulation||{target_w:-15,low_w:-25,high_w:-5,correction_w:-15-g,heater_model_w:800,max_dimmer_percent:100,max_heater_w:800};$('target').textContent=signedW(r.target_w);$('band').textContent=`${r.low_w} … ${r.high_w} W`;$('gridMeasured').textContent=signedW(g);const correctionW=Number(r.correction_w||0),maxHeaterW=Number(r.max_heater_w??r.heater_model_w??800),heaterHeadroom=Math.max(0,maxHeaterW-Number(d.dimmer.heater_w||0)),maxDimmer=Number(r.max_dimmer_percent??100);if(correctionW>0&&d.dimmer.cmd>=maxDimmer-1&&heaterHeadroom<=5)$('correction').textContent=`Besoin ${signedW(correctionW)} · CE saturé`;else if(correctionW>0)$('correction').textContent=`Besoin ${signedW(correctionW)} · marge ${fmtW(heaterHeadroom)}`;else $('correction').textContent=signedW(correctionW);$('regCmdActual').textContent=`${d.dimmer.cmd}% / ${d.dimmer.actual}%`;$('heaterModel').textContent=`${r.heater_model_w||800} W`;
     let chips='';chips+=chip('Fronius '+(d.fronius?'OK':'OFF'),d.fronius?'ok':'err');chips+=chip('Dimmer '+(d.dimmer.online?'OK':'OFF'),d.dimmer.online?'ok':'err');chips+=chip(d.dimmer.synced?'Synchronisé':'Synchronisation',d.dimmer.synced?'ok':'warn');chips+=chip('MQTT '+(d.mqtt_connected?'OK':'OFF'),d.mqtt_connected?'ok':'warn');if(d.ecs.at_max)chips+=chip('TEMP MAX','err');else if(d.dimmer.alarm)chips+=chip('Alarme dimmer','err');else chips+=chip('ECS OK','ok');$('chips').innerHTML=chips;
     addHistory(d);
   }
