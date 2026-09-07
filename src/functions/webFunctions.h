@@ -5,10 +5,13 @@
 #endif
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
+#include <PubSubClient.h>
 #include <WiFi.h>
 #include "appweb.h"
+#include "froniusZeroGrid.h"
 
 extern DisplayValues gDisplayValues;
+extern PubSubClient client;
 
 //***********************************
 //************* Gestion du serveur WEB
@@ -29,7 +32,7 @@ static String buildApiStatus()
   int dimmerCmd = constrain(gDisplayValues.dimmer, 0, 100);
   int dimmerActual = dimmerOnline ? constrain(gDisplayValues.dimmerReported, 0, 100) : 0;
 
-  const int heaterPower = (800 * dimmerActual) / 100;
+  const int heaterPower = (FRONIUS_HEATER_POWER_W * dimmerActual) / 100;
   const int gridPower = (int)gDisplayValues.grid;
   const int pvPower = (int)gDisplayValues.production;
 
@@ -71,11 +74,15 @@ static String buildApiStatus()
   else
     status = "ZERO GRID";
 
-  StaticJsonDocument<1536> doc;
+  StaticJsonDocument<2304> doc;
   doc["version"] = String(VERSION);
   doc["uptime_s"] = now / 1000UL;
   doc["ip"] = gDisplayValues.IP;
   doc["wifi_rssi"] = WiFi.isConnected() ? WiFi.RSSI() : -127;
+  doc["wifi_ssid"] = WiFi.isConnected() ? WiFi.SSID() : "";
+  doc["heap_free"] = ESP.getFreeHeap();
+  doc["mqtt_connected"] = client.connected();
+  doc["mqtt_state"] = client.state();
   doc["status"] = status;
 
   doc["pv_w"] = pvPower;
@@ -88,6 +95,15 @@ static String buildApiStatus()
     doc["fronius_age_ms"] = (unsigned long)(now - gDisplayValues.froniusLastOkMs);
   else
     doc["fronius_age_ms"] = nullptr;
+
+  JsonObject regulation = doc.createNestedObject("regulation");
+  regulation["version"] = "V14.3";
+  regulation["target_w"] = FRONIUS_GRID_TARGET_W;
+  regulation["low_w"] = FRONIUS_GRID_TARGET_W - FRONIUS_GRID_DEADBAND_W;
+  regulation["high_w"] = FRONIUS_GRID_TARGET_W + FRONIUS_GRID_DEADBAND_W;
+  regulation["correction_w"] = FRONIUS_GRID_TARGET_W - gridPower;
+  regulation["heater_model_w"] = FRONIUS_HEATER_POWER_W;
+  regulation["state"] = status;
 
   JsonObject dimmer = doc.createNestedObject("dimmer");
   dimmer["online"] = dimmerOnline;
@@ -127,7 +143,7 @@ static String buildApiConfig(bool saved = false)
   doc["dimmer_ip"] = config.dimmer;
   doc["screen_timeout_s"] = config.ScreenTime;
   doc["fallback_tmax_c"] = config.tmax;
-  doc["heater_power_w"] = 800;
+  doc["heater_power_w"] = FRONIUS_HEATER_POWER_W;
   doc["autonomous"] = config.autonome;
   doc["mqtt_runtime_editable"] = false;
 
@@ -228,6 +244,64 @@ void call_pages()
     }
 
     request->send(200, "application/json", buildApiConfig(changed));
+  });
+
+  // Download the complete SPIFFS configuration so it can be restored before
+  // or after an uploadfs operation. wifi.json deliberately remains separate.
+  server.on("/api/config/export", HTTP_GET, [](AsyncWebServerRequest *request) {
+    if (!SPIFFS.exists(filename_conf)) {
+      sendJsonError(request, 404, "config.json introuvable");
+      return;
+    }
+    request->send(SPIFFS, filename_conf, "application/json", true);
+  });
+
+  // Restore a complete config.json sent by the local V2 page. The JSON is
+  // validated before replacing the current file, then applied immediately.
+  server.on("/api/config/import", HTTP_POST, [](AsyncWebServerRequest *request) {
+    if (!request->hasParam("config_json", true)) {
+      sendJsonError(request, 400, "Fichier de configuration absent");
+      return;
+    }
+
+    const String raw = request->getParam("config_json", true)->value();
+    if (raw.length() == 0 || raw.length() > 4096) {
+      sendJsonError(request, 400, "Taille de configuration invalide");
+      return;
+    }
+
+    StaticJsonDocument<2048> imported;
+    const DeserializationError error = deserializeJson(imported, raw);
+    if (error || !imported.is<JsonObject>()) {
+      sendJsonError(request, 400, "JSON de configuration invalide");
+      return;
+    }
+
+    // Require the two keys that identify a current PV Router config and avoid
+    // silently replacing it with an unrelated but syntactically valid JSON.
+    if (!imported.containsKey("dimmer") || !imported.containsKey("screentime")) {
+      sendJsonError(request, 400, "Ce fichier ne ressemble pas a une configuration PV Router");
+      return;
+    }
+
+    File configFile = SPIFFS.open(filename_conf, "w");
+    if (!configFile) {
+      sendJsonError(request, 500, "Impossible d'ouvrir config.json en ecriture");
+      return;
+    }
+
+    const size_t written = configFile.print(raw);
+    configFile.close();
+    if (written != raw.length()) {
+      sendJsonError(request, 500, "Ecriture incomplete de config.json");
+      return;
+    }
+
+    loadConfiguration(filename_conf, config);
+    Serial.println(F("[WEB] Configuration restored from V2 upload"));
+    request->send(200,
+                  "application/json",
+                  "{\"ok\":true,\"restored\":true,\"restart_recommended\":true}");
   });
 
   server.on("/api/screen/toggle", HTTP_POST, [](AsyncWebServerRequest *request) {
