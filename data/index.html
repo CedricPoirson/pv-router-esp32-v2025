@@ -36,7 +36,7 @@
 <div class="wrap">
   <header>
     <div class="brand"><div class="logo">PV</div><div><h1>PV Router</h1><div class="sub"><span class="pulse" id="liveDot"></span><span id="deviceLine">Connexion…</span></div></div></div>
-    <nav><button class="btn" onclick="toggleScreen()">Écran ON/OFF</button><button class="btn" id="copyBtn" onclick="copyDiagnostic()">Copier diagnostic</button><a class="btn" href="/update">OTA</a><a class="btn primary" href="/config.html">Configuration</a></nav>
+    <nav><button class="btn" onclick="toggleScreen()">Écran ON/OFF</button><a class="btn" href="#aide-ecran">Aide écran</a><button class="btn" id="copyBtn" onclick="copyDiagnostic()">Copier diagnostic</button><a class="btn" href="/update">OTA</a><a class="btn primary" href="/config.html">Configuration</a></nav>
   </header>
 
   <section class="hero" id="hero"><div class="hero-top"><div class="hero-label" id="heroLabel">DISPO</div><div class="hero-state" id="heroState">—</div></div><div class="hero-value" id="heroValue">—</div><div class="hero-note" id="heroNote">Chargement des données temps réel…</div></section>
@@ -85,6 +85,25 @@
       <div class="title">État système</div><div class="chips" id="chips"><span class="chip">Chargement…</span></div>
       <div class="rows" style="margin-top:16px"><div class="row"><span>Dernière trame Fronius</span><strong id="froniusAge2">—</strong></div><div class="row"><span>Dernière trame dimmer</span><strong id="dimmerAge">—</strong></div><div class="row"><span>MQTT</span><strong id="mqtt">—</strong></div><div class="row"><span>Mémoire libre</span><strong id="heap">—</strong></div><div class="row"><span>Alerte RobotDyn</span><strong id="alert">RAS</strong></div><div class="row"><span>Uptime</span><strong id="uptime">—</strong></div></div>
     </div>
+  </section>
+
+  <section class="card" id="aide-ecran" style="margin-top:12px">
+    <div class="title">Comprendre l’écran TTGO</div>
+    <div class="section" style="margin-top:0">
+      <div class="rows">
+        <div class="row"><span>En-tête</span><strong>Heure · eau/Tmax · état CE</strong></div>
+        <div class="row"><span>Bandeau central</span><strong>IMPORT / ZERO GRID / DISPO / SURPLUS</strong></div>
+        <div class="row"><span>PV + EXP/IMP</span><strong>Production Fronius et échange réseau</strong></div>
+        <div class="row"><span>CE % / W</span><strong>Sortie réelle du chauffe-eau</strong></div>
+      </div>
+      <div class="rows">
+        <div class="row"><span>REPRISE xx°C</span><strong>Seuil de redémarrage après TEMP MAX</strong></div>
+        <div class="row"><span>Jauge basse</span><strong>Import à gauche · puissance disponible à droite</strong></div>
+        <div class="row"><span>Appui court</span><strong>Principal → Diagnostic 2/3 → Aide 3/3</strong></div>
+        <div class="row"><span>Appui long</span><strong>Extinction manuelle de l’écran</strong></div>
+      </div>
+    </div>
+    <div class="small" style="white-space:normal;overflow:visible">DISPO indique la puissance PV encore routable en tenant compte de la puissance déjà absorbée par le chauffe-eau. SURPLUS est utilisé lorsque de l’énergie reste exportée alors que le chauffe-eau est thermiquement bloqué ou ne peut plus absorber davantage.</div>
   </section>
 
   <div class="footer"><span id="version">Firmware —</span><span>Mise à jour automatique toutes les 2 s · historique non écrit en flash</span></div>
