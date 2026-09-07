@@ -2,7 +2,7 @@
 #define FRONIUS_ZERO_GRID_H
 
 // Fronius Zero Grid controller
-// V13.4 - RobotDyn firmware 20260514 integration + fail-safe watchdog
+// V14 - asymmetric control: protect against grid import, smooth surplus capture
 // Positive P_Grid = import from grid
 // Negative P_Grid = export to grid
 
@@ -10,13 +10,25 @@
 #include <HTTPClient.h>
 #include <WiFi.h>
 
+// Real measured heater power at 100% dimmer. This value is deliberately the
+// physical resistance power used by the router, not RobotDyn /config.charge.
 #define FRONIUS_HEATER_POWER_W 800
 #define FRONIUS_MAX_DIMMER 100
 
-// Aim for a very small permanent export so short variations do not
-// immediately become grid import. Accepted band: -20 W .. 0 W.
-#define FRONIUS_GRID_TARGET_W -10
+// Bias the controller slightly toward export so short load changes are less
+// likely to become grid import. Accepted steady band: -25 W .. -5 W.
+#define FRONIUS_GRID_TARGET_W -15
 #define FRONIUS_GRID_DEADBAND_W 10
+
+// Asymmetric control tuning.
+// Import is the priority: a large import can unload the heater in one sample.
+// Surplus is captured progressively so delayed RobotDyn/Fronius feedback does
+// not create the large 20% -> 60% -> 20% oscillations seen in field logs.
+#define DIMMER_IMPORT_FAST_W 120
+#define DIMMER_IMPORT_MAX_STEP_PERCENT 15
+#define DIMMER_SURPLUS_FAST_W 200
+#define DIMMER_SURPLUS_STEP_PERCENT 8
+#define DIMMER_SURPLUS_FINE_STEP_PERCENT 3
 
 #define DIMMER_MIN_CHANGE 1
 #define DIMMER_HTTP_TIMEOUT_MS 500UL
@@ -46,6 +58,19 @@ enum ZeroGridState {
     ZERO_GRID_IMPORT,
     ZERO_GRID_LOAD_LIMITED
 };
+
+static int dimmerPercentToHeaterWatts(int percent)
+{
+    percent = constrain(percent, 0, FRONIUS_MAX_DIMMER);
+    return (FRONIUS_HEATER_POWER_W * percent) / 100;
+}
+
+static int heaterWattsToDimmerPercent(int watts)
+{
+    watts = constrain(watts, 0, FRONIUS_HEATER_POWER_W);
+    return (watts * 100 + (FRONIUS_HEATER_POWER_W / 2)) /
+           FRONIUS_HEATER_POWER_W;
+}
 
 bool sendDimmerPower(int power)
 {
@@ -114,7 +139,7 @@ void froniusZeroGridSimulation()
     lastFailsafeAttemptMs = 0;
 
     const int grid = (int)gDisplayValues.grid;
-    const int commandedDimmer = gDisplayValues.dimmer;
+    const int commandedDimmer = constrain(gDisplayValues.dimmer, 0, FRONIUS_MAX_DIMMER);
     const unsigned long now = millis();
 
     int reportedDimmer = gDisplayValues.dimmerReported;
@@ -126,37 +151,70 @@ void froniusZeroGridSimulation()
         gDisplayValues.dimmerLastOkMs > 0 &&
         ((unsigned long)(now - gDisplayValues.dimmerLastOkMs) <= DIMMER_STATE_FRESH_MS);
 
-    // P_Grid already contains the real heater consumption. Therefore the
-    // incremental controller must start from the heater power that is really
-    // applied, not from an old command that may still be waiting to sync.
+    // P_Grid already includes the heater consumption. Use the power that is
+    // physically applied by the 800 W resistance to calculate the absolute
+    // heater power that would place the grid at our small export target.
     const int controlDimmer = dimmerStateFresh ? reportedDimmer : commandedDimmer;
+    const int currentHeaterPower = dimmerPercentToHeaterWatts(controlDimmer);
 
-    int targetDimmer = controlDimmer;
-    int targetHeaterPower = (FRONIUS_HEATER_POWER_W * controlDimmer) / 100;
-    int powerCorrection = 0;
+    // The last command is important while RobotDyn is still moving toward it.
+    // It prevents an import sample from raising the command again simply
+    // because ACTUAL is still above/below a previous request.
+    const int requestedDimmer =
+        lastSentDimmer >= 0
+            ? constrain(lastSentDimmer, 0, FRONIUS_MAX_DIMMER)
+            : commandedDimmer;
 
     const int gridLow = FRONIUS_GRID_TARGET_W - FRONIUS_GRID_DEADBAND_W;
     const int gridHigh = FRONIUS_GRID_TARGET_W + FRONIUS_GRID_DEADBAND_W;
 
-    if (grid < gridLow || grid > gridHigh) {
-        const int currentHeaterPower =
-            (FRONIUS_HEATER_POWER_W * controlDimmer) / 100;
+    int rawTargetHeaterPower =
+        currentHeaterPower + (FRONIUS_GRID_TARGET_W - grid);
+    rawTargetHeaterPower = constrain(rawTargetHeaterPower,
+                                     0,
+                                     FRONIUS_HEATER_POWER_W);
 
-        powerCorrection = FRONIUS_GRID_TARGET_W - grid;
-        targetHeaterPower = currentHeaterPower + powerCorrection;
+    const int rawTargetDimmer =
+        heaterWattsToDimmerPercent(rawTargetHeaterPower);
 
-        if (targetHeaterPower < 0)
-            targetHeaterPower = 0;
-        if (targetHeaterPower > FRONIUS_HEATER_POWER_W)
-            targetHeaterPower = FRONIUS_HEATER_POWER_W;
+    int targetDimmer = requestedDimmer;
 
-        targetDimmer = (targetHeaterPower * 100 + (FRONIUS_HEATER_POWER_W / 2)) /
-                       FRONIUS_HEATER_POWER_W;
+    if (grid > gridHigh) {
+        // GRID IMPORT: reducing the dimmer reduces consumption immediately.
+        // Never increase the requested heater power while the house imports.
+        targetDimmer = min(rawTargetDimmer, requestedDimmer);
+
+        // A sudden appliance load gets priority. At >=120 W import we apply
+        // the physics-based target immediately; if the import exceeds the
+        // heater's present power this naturally drives POWER straight to 0.
+        if (grid < DIMMER_IMPORT_FAST_W) {
+            const int minAllowed =
+                max(0, requestedDimmer - DIMMER_IMPORT_MAX_STEP_PERCENT);
+            if (targetDimmer < minAllowed)
+                targetDimmer = minAllowed;
+        }
     }
+    else if (grid < gridLow) {
+        // PV SURPLUS: increasing the dimmer increases consumption by about
+        // 8 W per percentage point with the measured 800 W resistance.
+        // Capture it progressively to avoid overshoot into grid import.
+        targetDimmer = max(rawTargetDimmer, requestedDimmer);
 
-    if (targetDimmer < 0) targetDimmer = 0;
-    if (targetDimmer > FRONIUS_MAX_DIMMER) targetDimmer = FRONIUS_MAX_DIMMER;
+        const int surplusW = -grid;
+        const int maxStep =
+            surplusW >= DIMMER_SURPLUS_FAST_W
+                ? DIMMER_SURPLUS_STEP_PERCENT
+                : DIMMER_SURPLUS_FINE_STEP_PERCENT;
+        const int maxAllowed =
+            min(FRONIUS_MAX_DIMMER, requestedDimmer + maxStep);
 
+        if (targetDimmer > maxAllowed)
+            targetDimmer = maxAllowed;
+    }
+    // Inside the target band, keep the last requested value. Do not chase
+    // every Fronius watt with another HTTP command.
+
+    targetDimmer = constrain(targetDimmer, 0, FRONIUS_MAX_DIMMER);
     gDisplayValues.dimmer = targetDimmer;
 
     const bool dimmerMismatch =
@@ -202,11 +260,12 @@ void froniusZeroGridSimulation()
                 dimmerMismatchSinceMs = now;
 
             if (valueChanged) {
-                Serial.printf("[DIMMER] %d%% -> %d%% (ACTUAL=%d%% GRID=%d W)\n",
+                Serial.printf("[DIMMER] %d%% -> %d%% (ACTUAL=%d%% GRID=%d W LOAD=%dW)\n",
                               previousSentDimmer < 0 ? commandedDimmer : previousSentDimmer,
                               gDisplayValues.dimmer,
                               controlDimmer,
-                              grid);
+                              grid,
+                              currentHeaterPower);
             }
         }
     }
@@ -234,10 +293,15 @@ void froniusZeroGridSimulation()
                 Serial.println("[ZERO] SURPLUS PV -> LOAD UP");
                 break;
             case ZERO_GRID_IMPORT:
-                Serial.println("[ZERO] IMPORT RESEAU -> LOAD DOWN");
+                if (grid >= DIMMER_IMPORT_FAST_W)
+                    Serial.println("[ZERO] IMPORT FAST -> LOAD DOWN");
+                else
+                    Serial.println("[ZERO] IMPORT RESEAU -> LOAD DOWN");
                 break;
             default:
-                Serial.println("[ZERO] TARGET OK (-20..0 W)");
+                Serial.printf("[ZERO] TARGET OK (%d..%d W)\n",
+                              gridLow,
+                              gridHigh);
                 break;
         }
 
