@@ -35,87 +35,96 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><div class="logo">PV</div><div><h1>PV Router</h1><div class="sub"><span class="pulse" id="liveDot"></span><span id="deviceLine">Connexion…</span></div></div></div>
-    <nav><button class="btn" onclick="toggleScreen()">Écran ON/OFF</button><a class="btn" href="#aide-ecran">Aide écran</a><button class="btn" id="copyBtn" onclick="copyDiagnostic()">Copier diagnostic</button><a class="btn" href="/update">OTA</a><a class="btn primary" href="/config.html">Configuration</a></nav>
+    <div class="brand"><div class="logo">PV</div><div><h1>PV Router</h1><div class="sub"><span class="pulse" id="liveDot"></span><span id="deviceLine" data-i18n="connecting">Connexion…</span></div></div></div>
+    <nav><button class="btn" onclick="toggleScreen()" data-i18n="screen_toggle">Écran ON/OFF</button><a class="btn" href="#aide-ecran" data-i18n="screen_help">Aide écran</a><button class="btn" id="copyBtn" onclick="copyDiagnostic()" data-i18n="copy_diag">Copier diagnostic</button><a class="btn" href="/update">OTA</a><a class="btn primary" href="/config.html" data-i18n="configuration">Configuration</a></nav>
   </header>
 
-  <section class="hero" id="hero"><div class="hero-top"><div class="hero-label" id="heroLabel">DISPO</div><div class="hero-state" id="heroState">—</div></div><div class="hero-value" id="heroValue">—</div><div class="hero-note" id="heroNote">Chargement des données temps réel…</div></section>
+  <section class="hero" id="hero"><div class="hero-top"><div class="hero-label" id="heroLabel">DISPO</div><div class="hero-state" id="heroState">—</div></div><div class="hero-value" id="heroValue">—</div><div class="hero-note" id="heroNote" data-i18n="loading_realtime">Chargement des données temps réel…</div></section>
 
   <section class="grid">
-    <div class="card"><div class="label">Production PV</div><div class="value green" id="pv">—</div><div class="small" id="froniusAge">Fronius —</div></div>
-    <div class="card"><div class="label">Réseau</div><div class="value cyan" id="grid">—</div><div class="small" id="gridMode">—</div></div>
-    <div class="card"><div class="label">Maison</div><div class="value" id="house">—</div><div class="small">Consommation instantanée</div></div>
-    <div class="card"><div class="label">Chauffe-eau</div><div class="value orange" id="heater">—</div><div class="small" id="dimmerLine">Dimmer —</div></div>
+    <div class="card"><div class="label" data-i18n="pv_production">Production PV</div><div class="value green" id="pv">—</div><div class="small" id="froniusAge">Fronius —</div></div>
+    <div class="card"><div class="label" data-i18n="grid">Réseau</div><div class="value cyan" id="grid">—</div><div class="small" id="gridMode">—</div></div>
+    <div class="card"><div class="label" data-i18n="house">Maison</div><div class="value" id="house">—</div><div class="small" data-i18n="instant_consumption">Consommation instantanée</div></div>
+    <div class="card"><div class="label" data-i18n="water_heater">Chauffe-eau</div><div class="value orange" id="heater">—</div><div class="small" id="dimmerLine">Dimmer —</div></div>
   </section>
 
   <section class="grid">
-    <div class="card"><div class="label">Température ECS</div><div class="value" id="ecsTemp">—</div><div class="small" id="ecsMax">Tmax —</div><div class="small" id="ecsTrigger">Reprise —</div></div>
-    <div class="card"><div class="label">Commande dimmer</div><div class="value" id="cmd">—</div><div class="small" id="actual">Réel —</div></div>
+    <div class="card"><div class="label" data-i18n="dhw_temp">Température ECS</div><div class="value" id="ecsTemp">—</div><div class="small" id="ecsMax">Tmax —</div><div class="small" id="ecsTrigger">Reprise —</div></div>
+    <div class="card"><div class="label" data-i18n="dimmer_command">Commande dimmer</div><div class="value" id="cmd">—</div><div class="small" id="actual">Réel —</div></div>
     <div class="card"><div class="label">Wi-Fi ESP32</div><div class="value blue" id="wifi">—</div><div class="small" id="ip">IP —</div></div>
     <div class="card"><div class="label">Wi-Fi RobotDyn</div><div class="value blue" id="dimmerRssi">—</div><div class="small" id="dimmerVersion">Version —</div></div>
   </section>
 
   <section class="section history-layout">
     <div class="card">
-      <div class="title">Historique local · 30 min max</div>
-      <div class="small" id="historyInfo" style="margin-top:-8px;margin-bottom:8px">Les données restent uniquement dans ce navigateur.</div>
+      <div class="title" data-i18n="local_history">Historique local · 30 min max</div>
+      <div class="small" id="historyInfo" style="margin-top:-8px;margin-bottom:8px" data-i18n="browser_only">Les données restent uniquement dans ce navigateur.</div>
       <div class="chart-wrap"><canvas id="historyChart"></canvas></div>
-      <div class="legend"><span><i class="dot pv"></i>PV</span><span><i class="dot gridout"></i>Réseau export</span><span><i class="dot gridin"></i>Réseau import</span><span><i class="dot heater"></i>Chauffe-eau</span></div>
+      <div class="legend"><span><i class="dot pv"></i>PV</span><span><i class="dot gridout"></i><span data-i18n="grid_export">Réseau export</span></span><span><i class="dot gridin"></i><span data-i18n="grid_import">Réseau import</span></span><span><i class="dot heater"></i><span data-i18n="water_heater">Chauffe-eau</span></span></div>
     </div>
     <div class="card">
-      <div class="title">Régulation V14.3</div>
+      <div class="title">Zero Grid V14.3</div>
       <div class="rows">
-        <div class="row"><span>Cible réseau</span><strong id="target">—</strong></div>
-        <div class="row"><span>Bande acceptée</span><strong id="band">—</strong></div>
-        <div class="row"><span>Réseau mesuré</span><strong id="gridMeasured">—</strong></div>
-        <div class="row"><span>Correction théorique</span><strong id="correction">—</strong></div>
-        <div class="row"><span>Commande / réel</span><strong id="regCmdActual">—</strong></div>
-        <div class="row"><span>Modèle chauffe-eau</span><strong id="heaterModel">—</strong></div>
+        <div class="row"><span data-i18n="grid_target">Cible réseau</span><strong id="target">—</strong></div>
+        <div class="row"><span data-i18n="accepted_band">Bande acceptée</span><strong id="band">—</strong></div>
+        <div class="row"><span data-i18n="grid_measured">Réseau mesuré</span><strong id="gridMeasured">—</strong></div>
+        <div class="row"><span data-i18n="theoretical_correction">Correction théorique</span><strong id="correction">—</strong></div>
+        <div class="row"><span data-i18n="command_actual">Commande / réel</span><strong id="regCmdActual">—</strong></div>
+        <div class="row"><span data-i18n="heater_model">Modèle chauffe-eau</span><strong id="heaterModel">—</strong></div>
       </div>
     </div>
   </section>
 
   <section class="section">
     <div class="card">
-      <div class="title">Puissance disponible / import réseau</div>
+      <div class="title" data-i18n="available_import">Puissance disponible / import réseau</div>
       <div class="gauge"><div class="bar"><div class="marker" id="marker"></div></div><div class="scale"><span>-2 kW</span><span>0</span><span>2 kW</span><span>4 kW</span><span>6 kW</span></div></div>
-      <div class="rows" style="margin-top:16px"><div class="row"><span>Puissance routable calculée</span><strong id="available">—</strong></div><div class="row"><span>Puissance résistance estimée</span><strong id="heater2">—</strong></div><div class="row"><span>État de régulation</span><strong id="routing">—</strong></div></div>
+      <div class="rows" style="margin-top:16px"><div class="row"><span data-i18n="routable_power">Puissance routable calculée</span><strong id="available">—</strong></div><div class="row"><span data-i18n="estimated_heater">Puissance résistance estimée</span><strong id="heater2">—</strong></div><div class="row"><span data-i18n="regulation_state">État de régulation</span><strong id="routing">—</strong></div></div>
     </div>
     <div class="card">
-      <div class="title">État système</div><div class="chips" id="chips"><span class="chip">Chargement…</span></div>
-      <div class="rows" style="margin-top:16px"><div class="row"><span>Dernière trame Fronius</span><strong id="froniusAge2">—</strong></div><div class="row"><span>Dernière trame dimmer</span><strong id="dimmerAge">—</strong></div><div class="row"><span>MQTT</span><strong id="mqtt">—</strong></div><div class="row"><span>Mémoire libre</span><strong id="heap">—</strong></div><div class="row"><span>Alerte RobotDyn</span><strong id="alert">RAS</strong></div><div class="row"><span>Uptime</span><strong id="uptime">—</strong></div></div>
+      <div class="title" data-i18n="system_state">État système</div><div class="chips" id="chips"><span class="chip" data-i18n="loading">Chargement…</span></div>
+      <div class="rows" style="margin-top:16px"><div class="row"><span data-i18n="last_fronius">Dernière trame Fronius</span><strong id="froniusAge2">—</strong></div><div class="row"><span data-i18n="last_dimmer">Dernière trame dimmer</span><strong id="dimmerAge">—</strong></div><div class="row"><span>MQTT</span><strong id="mqtt">—</strong></div><div class="row"><span data-i18n="free_memory">Mémoire libre</span><strong id="heap">—</strong></div><div class="row"><span data-i18n="robotdyn_alert">Alerte RobotDyn</span><strong id="alert">RAS</strong></div><div class="row"><span>Uptime</span><strong id="uptime">—</strong></div></div>
     </div>
   </section>
 
   <section class="card" id="aide-ecran" style="margin-top:12px">
-    <div class="title">Comprendre l’écran TTGO</div>
+    <div class="title" data-i18n="understand_ttgo">Comprendre l’écran TTGO</div>
     <div class="section" style="margin-top:0">
       <div class="rows">
-        <div class="row"><span>En-tête</span><strong>Heure · eau/Tmax · état CE</strong></div>
-        <div class="row"><span>Bandeau central</span><strong>IMPORT / ZERO GRID / DISPO / SURPLUS</strong></div>
-        <div class="row"><span>PV + EXP/IMP</span><strong>Production Fronius et échange réseau</strong></div>
-        <div class="row"><span>CE % / W</span><strong>Sortie réelle du chauffe-eau</strong></div>
+        <div class="row"><span data-i18n="header">En-tête</span><strong data-i18n="header_desc">Heure · eau/Tmax · état CE</strong></div>
+        <div class="row"><span data-i18n="center_banner">Bandeau central</span><strong>IMPORT / ZERO GRID / DISPO / SURPLUS</strong></div>
+        <div class="row"><span>PV + EXP/IMP</span><strong data-i18n="pv_grid_desc">Production Fronius et échange réseau</strong></div>
+        <div class="row"><span>CE % / W</span><strong data-i18n="heater_output_desc">Sortie réelle du chauffe-eau</strong></div>
       </div>
       <div class="rows">
-        <div class="row"><span>REPRISE xx°C</span><strong>Seuil de redémarrage après TEMP MAX</strong></div>
-        <div class="row"><span>Jauge basse</span><strong>Import à gauche · puissance disponible à droite</strong></div>
-        <div class="row"><span>Appui court</span><strong>Principal → Diagnostic 2/3 → Aide 3/3</strong></div>
-        <div class="row"><span>Appui long</span><strong>Extinction manuelle de l’écran</strong></div>
+        <div class="row"><span>REPRISE xx°C</span><strong data-i18n="restart_threshold_desc">Seuil de redémarrage après TEMP MAX</strong></div>
+        <div class="row"><span data-i18n="bottom_gauge">Jauge basse</span><strong data-i18n="bottom_gauge_desc">Import à gauche · puissance disponible à droite</strong></div>
+        <div class="row"><span data-i18n="short_press">Appui court</span><strong data-i18n="short_press_desc">Principal → Diagnostic 2/3 → Aide 3/3</strong></div>
+        <div class="row"><span data-i18n="long_press">Appui long</span><strong data-i18n="long_press_desc">Extinction manuelle de l’écran</strong></div>
       </div>
     </div>
-    <div class="small" style="white-space:normal;overflow:visible">DISPO indique la puissance PV encore routable en tenant compte de la puissance déjà absorbée par le chauffe-eau. SURPLUS est utilisé lorsque de l’énergie reste exportée alors que le chauffe-eau est thermiquement bloqué ou ne peut plus absorber davantage.</div>
+    <div class="small" style="white-space:normal;overflow:visible" data-i18n="help_note">DISPO indique la puissance PV encore routable en tenant compte de la puissance déjà absorbée par le chauffe-eau. SURPLUS est utilisé lorsque de l’énergie reste exportée alors que le chauffe-eau est thermiquement bloqué ou ne peut plus absorber davantage.</div>
   </section>
 
-  <div class="footer"><span id="version">Firmware —</span><span>Mise à jour automatique toutes les 2 s · historique non écrit en flash</span></div>
+  <div class="footer"><span id="version">Firmware —</span><span data-i18n="footer_refresh">Mise à jour automatique toutes les 2 s · historique non écrit en flash</span></div>
 </div>
-<div class="toast" id="toast">Diagnostic copié</div>
+<div class="toast" id="toast" data-i18n="diag_copied">Diagnostic copié</div>
 <script>
+  const LANG_KEY='pvrouter_lang';
+  let lang=localStorage.getItem(LANG_KEY)==='en'?'en':'fr';
+  const T={
+    fr:{connecting:'Connexion…',screen_toggle:'Écran ON/OFF',screen_help:'Aide écran',copy_diag:'Copier diagnostic',configuration:'Configuration',loading_realtime:'Chargement des données temps réel…',pv_production:'Production PV',grid:'Réseau',house:'Maison',instant_consumption:'Consommation instantanée',water_heater:'Chauffe-eau',dhw_temp:'Température ECS',dimmer_command:'Commande dimmer',local_history:'Historique local · 30 min max',browser_only:'Les données restent uniquement dans ce navigateur.',grid_export:'Réseau export',grid_import:'Réseau import',grid_target:'Cible réseau',accepted_band:'Bande acceptée',grid_measured:'Réseau mesuré',theoretical_correction:'Correction théorique',command_actual:'Commande / réel',heater_model:'Modèle chauffe-eau',available_import:'Puissance disponible / import réseau',routable_power:'Puissance routable calculée',estimated_heater:'Puissance résistance estimée',regulation_state:'État de régulation',system_state:'État système',loading:'Chargement…',last_fronius:'Dernière trame Fronius',last_dimmer:'Dernière trame dimmer',free_memory:'Mémoire libre',robotdyn_alert:'Alerte RobotDyn',understand_ttgo:'Comprendre l’écran TTGO',header:'En-tête',header_desc:'Heure · eau/Tmax · état CE',center_banner:'Bandeau central',pv_grid_desc:'Production Fronius et échange réseau',heater_output_desc:'Sortie réelle du chauffe-eau',restart_threshold_desc:'Seuil de redémarrage après TEMP MAX',bottom_gauge:'Jauge basse',bottom_gauge_desc:'Import à gauche · puissance disponible à droite',short_press:'Appui court',short_press_desc:'Principal → Diagnostic 2/3 → Aide 3/3',long_press:'Appui long',long_press_desc:'Extinction manuelle de l’écran',help_note:'DISPO indique la puissance PV encore routable en tenant compte de la puissance déjà absorbée par le chauffe-eau. SURPLUS est utilisé lorsque de l’énergie reste exportée alors que le chauffe-eau est thermiquement bloqué ou ne peut plus absorber davantage.',footer_refresh:'Mise à jour automatique toutes les 2 s · historique non écrit en flash',diag_copied:'Diagnostic copié',never:'jamais',browser_history:'Historique navigateur',points:'points',no_flash:'aucune écriture flash',history_building:'Historique en cours de constitution…',start:'début',now:'maintenant',real:'Réel',unknown_version:'Version inconnue',resume:'Reprise',fallback:'secours',network_import:'Import réseau',network_export:'Export réseau',close_zero:'Réseau proche de zéro',from_grid:'Consommation depuis le réseau',available:'DISPO',available_note:'Surplus PV disponible',available_heater_note:'Surplus PV disponible, chauffe-eau inclus',need:'Besoin',heater_saturated:'CE saturé',headroom:'marge',synced:'Synchronisé',syncing:'Synchronisation',wait_resume:'ECS attente',alarm_dimmer:'Alarme dimmer',connected:'Connecté',disconnected:'Déconnecté',server_unavailable:'Serveur indisponible',no_diag:'Pas encore de diagnostic',day:'j',status_FRONIUS_OFFLINE:'FRONIUS OFFLINE',status_DIMMER_OFFLINE:'DIMMER OFFLINE',status_TEMP_MAX:'TEMP MAX',status_TEMP_HOLD:'TEMP HOLD',status_DIMMER_ALARM:'ALARME DIMMER',status_CE_SYNC:'CE SYNC',status_LOAD_LIMITED:'CHARGE LIMITÉE',status_IMPORT:'IMPORT',status_SURPLUS:'SURPLUS',status_ZERO_GRID:'ZERO GRID'},
+    en:{connecting:'Connecting…',screen_toggle:'Screen ON/OFF',screen_help:'Screen help',copy_diag:'Copy diagnostics',configuration:'Settings',loading_realtime:'Loading real-time data…',pv_production:'PV production',grid:'Grid',house:'House',instant_consumption:'Instant consumption',water_heater:'Water heater',dhw_temp:'DHW temperature',dimmer_command:'Dimmer command',local_history:'Local history · 30 min max',browser_only:'Data remains only in this browser.',grid_export:'Grid export',grid_import:'Grid import',grid_target:'Grid target',accepted_band:'Accepted band',grid_measured:'Measured grid',theoretical_correction:'Theoretical correction',command_actual:'Command / actual',heater_model:'Water-heater model',available_import:'Available power / grid import',routable_power:'Calculated routable power',estimated_heater:'Estimated heater power',regulation_state:'Regulation state',system_state:'System state',loading:'Loading…',last_fronius:'Last Fronius frame',last_dimmer:'Last dimmer frame',free_memory:'Free memory',robotdyn_alert:'RobotDyn alert',understand_ttgo:'Understanding the TTGO screen',header:'Header',header_desc:'Time · water/Tmax · heater state',center_banner:'Center banner',pv_grid_desc:'Fronius production and grid exchange',heater_output_desc:'Actual water-heater output',restart_threshold_desc:'Restart threshold after TEMP MAX',bottom_gauge:'Bottom gauge',bottom_gauge_desc:'Import on the left · available power on the right',short_press:'Short press',short_press_desc:'Main → Diagnostics 2/3 → Help 3/3',long_press:'Long press',long_press_desc:'Manually switch the screen off',help_note:'AVAILABLE shows the remaining PV power that can still be routed, including power already absorbed by the water heater. SURPLUS is shown when energy is still exported while the water heater is thermally blocked or cannot absorb more.',footer_refresh:'Automatic refresh every 2 s · history is not written to flash',diag_copied:'Diagnostics copied',never:'never',browser_history:'Browser history',points:'points',no_flash:'no flash writes',history_building:'Building history…',start:'start',now:'now',real:'Actual',unknown_version:'Unknown version',resume:'Resume',fallback:'fallback',network_import:'Grid import',network_export:'Grid export',close_zero:'Grid close to zero',from_grid:'Power drawn from grid',available:'AVAILABLE',available_note:'PV surplus available',available_heater_note:'PV surplus available, water heater included',need:'Need',heater_saturated:'heater saturated',headroom:'headroom',synced:'Synced',syncing:'Synchronizing',wait_resume:'DHW waiting',alarm_dimmer:'Dimmer alarm',connected:'Connected',disconnected:'Disconnected',server_unavailable:'Server unavailable',no_diag:'No diagnostics yet',day:'d',status_FRONIUS_OFFLINE:'FRONIUS OFFLINE',status_DIMMER_OFFLINE:'DIMMER OFFLINE',status_TEMP_MAX:'TEMP MAX',status_TEMP_HOLD:'TEMP HOLD',status_DIMMER_ALARM:'DIMMER ALARM',status_CE_SYNC:'HEATER SYNC',status_LOAD_LIMITED:'LOAD LIMITED',status_IMPORT:'IMPORT',status_SURPLUS:'SURPLUS',status_ZERO_GRID:'ZERO GRID'}
+  };
+  const tr=k=>(T[lang]&&T[lang][k])||T.fr[k]||k;
   const $=id=>document.getElementById(id);
+  function applyLanguage(){document.documentElement.lang=lang;document.querySelectorAll('[data-i18n]').forEach(el=>el.textContent=tr(el.dataset.i18n));if(lastStatus)render(lastStatus)}
+  function statusLabel(s){return tr('status_'+String(s||'').replaceAll(' ','_'))||s||'—'}
   const fmtW=w=>{w=Number(w||0);const a=Math.abs(w);return a>=1000?(a/1000).toFixed(2)+' kW':Math.round(a)+' W'};
   const fmtAxisW=w=>{w=Number(w||0);if(w===0)return '0 W';const sign=w>0?'+':'-',a=Math.abs(w);if(a>=1000){const digits=a%1000===0?0:1;return sign+(a/1000).toFixed(digits)+' kW'}return sign+Math.round(a)+' W'};
   const signedW=w=>{w=Number(w||0);return (w>0?'+':'')+Math.round(w)+' W'};
-  const age=ms=>ms==null?'jamais':ms<1000?'< 1 s':(ms/1000).toFixed(ms<10000?1:0)+' s';
-  const uptime=s=>{s=Number(s||0);const d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60);return d?`${d}j ${h}h`:`${h}h ${m}m`};
+  const age=ms=>ms==null?tr('never'):ms<1000?'< 1 s':(ms/1000).toFixed(ms<10000?1:0)+' s';
+  const uptime=s=>{s=Number(s||0);const d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60);return d?`${d}${tr('day')} ${h}h`:`${h}h ${m}m`};
   const tempColor=t=>t==null?'var(--muted)':t>=50?'var(--green)':t>=30?'var(--orange)':'var(--cyan)';
   function chip(text,kind=''){return `<span class="chip ${kind}">${text}</span>`}
   function markerFor(v){v=Math.max(-2000,Math.min(6000,v));return ((v+2000)/8000*100).toFixed(2)+'%'}
@@ -129,7 +138,7 @@
     history.push({t:now,pv:Number(d.pv_w||0),grid:Number(d.grid_w||0),heater:Number(d.dimmer?.heater_w||0)});
     while(history.length&&history[0].t<now-HISTORY_MS)history.shift();
     const mins=history.length>1?Math.min(30,(now-history[0].t)/60000):0;
-    $('historyInfo').textContent=`Historique navigateur : ${mins.toFixed(mins<10?1:0)} min · ${history.length} points · aucune écriture flash`;
+    $('historyInfo').textContent=`${tr('browser_history')} : ${mins.toFixed(mins<10?1:0)} min · ${history.length} ${tr('points')} · ${tr('no_flash')}`;
     drawHistory();
   }
 
@@ -138,44 +147,44 @@
     const rect=canvas.getBoundingClientRect(),w=Math.max(260,rect.width),h=250,dpr=window.devicePixelRatio||1;
     canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
     const ctx=canvas.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
-    const L=48,R=10,T=10,B=25,pw=w-L-R,ph=h-T-B;
+    const L=48,R=10,Tp=10,B=25,pw=w-L-R,ph=h-Tp-B;
     ctx.font='11px -apple-system,BlinkMacSystemFont,Segoe UI,Arial';ctx.fillStyle='#93a4bd';ctx.lineWidth=1;
-    if(history.length<2){ctx.fillText('Historique en cours de constitution…',L,T+20);return;}
+    if(history.length<2){ctx.fillText(tr('history_building'),L,Tp+20);return;}
     const now=Date.now(),start=Math.max(now-HISTORY_MS,history[0].t);
     let minY=Math.min(-500,...history.map(p=>p.grid));
     let maxY=Math.max(1000,...history.map(p=>Math.max(p.pv,p.heater,p.grid)));
     minY=Math.floor(minY/500)*500;maxY=Math.ceil(maxY/500)*500;if(maxY-minY<1000)maxY=minY+1000;
     const x=t=>L+((t-start)/Math.max(1,now-start))*pw;
-    const y=v=>T+(maxY-v)/(maxY-minY)*ph;
+    const y=v=>Tp+(maxY-v)/(maxY-minY)*ph;
     [minY,maxY].forEach(v=>{const yy=y(v);ctx.beginPath();ctx.moveTo(L,yy);ctx.lineTo(w-R,yy);ctx.strokeStyle='#ffffff12';ctx.lineWidth=1;ctx.stroke();ctx.fillStyle='#93a4bd';ctx.fillText(fmtAxisW(v),4,yy+4)});
     const zeroY=y(0);ctx.beginPath();ctx.moveTo(L,zeroY);ctx.lineTo(w-R,zeroY);ctx.strokeStyle='#ffffff55';ctx.lineWidth=1.5;ctx.stroke();ctx.fillStyle='#c4cedd';ctx.fillText('0 W',4,zeroY+4);
-    ctx.fillStyle='#93a4bd';ctx.fillText('début',L,h-6);ctx.fillText('maintenant',w-R-58,h-6);
+    ctx.fillStyle='#93a4bd';ctx.fillText(tr('start'),L,h-6);ctx.fillText(tr('now'),w-R-58,h-6);
     function series(key,color){ctx.beginPath();let started=false;for(const p of history){if(p.t<start)continue;const xx=x(p.t),yy=y(p[key]);if(!started){ctx.moveTo(xx,yy);started=true}else ctx.lineTo(xx,yy)}ctx.strokeStyle=color;ctx.lineWidth=2;ctx.stroke()}
     series('pv','#45d483');series('heater','#ffb347');
     ctx.lineWidth=2;for(let i=1;i<history.length;i++){const a=history[i-1],b=history[i];if(b.t<start)continue;ctx.beginPath();ctx.moveTo(x(Math.max(a.t,start)),y(a.grid));ctx.lineTo(x(b.t),y(b.grid));ctx.strokeStyle=((a.grid+b.grid)/2)>0?'#ff6470':'#48c7ef';ctx.stroke()}
   }
 
   function render(d){
-    lastStatus=d;document.body.classList.remove('offline');$('deviceLine').textContent=`${d.ip||'ESP32'} · ${d.status||'—'}`;$('version').textContent=`Firmware ${d.version||'—'}`;$('uptime').textContent=uptime(d.uptime_s);$('ip').textContent=`IP ${d.ip||'—'}`;$('wifi').textContent=`${d.wifi_rssi} dBm`;
-    $('pv').textContent=fmtW(d.pv_w);$('house').textContent=fmtW(d.house_w);$('available').textContent=fmtW(d.available_w);$('heater').textContent=fmtW(d.dimmer.heater_w);$('heater2').textContent=fmtW(d.dimmer.heater_w);$('cmd').textContent=`${d.dimmer.cmd}%`;$('actual').textContent=`Réel ${d.dimmer.actual}%`;$('dimmerLine').textContent=`Réel ${d.dimmer.actual}% · Cmd ${d.dimmer.cmd}%`;$('dimmerRssi').textContent=`${d.dimmer.rssi} dBm`;$('dimmerVersion').textContent=d.dimmer.version||'Version inconnue';$('dimmerAge').textContent=age(d.dimmer.age_ms);$('froniusAge').textContent=`Fronius ${d.fronius?'OK':'OFF'} · ${age(d.fronius_age_ms)}`;$('froniusAge2').textContent=age(d.fronius_age_ms);$('alert').textContent=d.dimmer.alert&&d.dimmer.alert!=='RAS'?d.dimmer.alert:'RAS';$('routing').textContent=d.status||'—';$('mqtt').textContent=d.mqtt_connected?'Connecté':`Déconnecté (${d.mqtt_state})`;$('heap').textContent=`${Math.round(Number(d.heap_free||0)/1024)} kB`;
-    const t=d.ecs.temp_c;$('ecsTemp').textContent=t==null?'—':Number(t).toFixed(1)+' °C';$('ecsTemp').style.color=d.ecs.at_max?'var(--red)':d.ecs.temp_hold?'var(--yellow)':tempColor(t);$('ecsMax').textContent=`Tmax ${d.ecs.max_c||'—'} °C${d.ecs.remote_max_c?' · RobotDyn':''}`;const release=d.ecs.release_c;$('ecsTrigger').textContent=release==null?'Reprise —':`Reprise ${Number(release).toFixed(1)} °C · trigger ${d.ecs.trigger_percent==null?'secours':d.ecs.trigger_percent+' %'}`;
-    const g=Number(d.grid_w||0);if(g>20){$('grid').textContent=fmtW(g);$('grid').className='value red';$('gridMode').textContent='Import réseau';}else if(g<-20){$('grid').textContent=fmtW(g);$('grid').className='value cyan';$('gridMode').textContent='Export réseau';}else{$('grid').textContent='0 W';$('grid').className='value green';$('gridMode').textContent='Zero Grid';}
-    let heroBg='var(--cyan)',heroText='#071216',heroLabel='ZERO GRID',heroValue=fmtW(d.available_w),note='Réseau proche de zéro';if(g>20){heroBg='var(--red)';heroText='#fff';heroLabel='IMPORT';heroValue=fmtW(g);note='Consommation depuis le réseau';}else if(Number(d.available_w)>2000){heroBg='var(--green)';heroText='#07120c';heroLabel='DISPO';heroValue=fmtW(d.available_w);note='Surplus PV disponible, chauffe-eau inclus';}else if(Number(d.available_w)>20){heroBg='var(--orange)';heroText='#1b1307';heroLabel='DISPO';heroValue=fmtW(d.available_w);note='Surplus PV disponible';}$('hero').style.background=heroBg;$('hero').style.color=heroText;$('heroLabel').textContent=heroLabel;$('heroValue').textContent=heroValue;$('heroState').textContent=d.status;$('heroNote').textContent=note;
+    lastStatus=d;document.body.classList.remove('offline');$('deviceLine').textContent=`${d.ip||'ESP32'} · ${statusLabel(d.status)}`;$('version').textContent=`Firmware ${d.version||'—'}`;$('uptime').textContent=uptime(d.uptime_s);$('ip').textContent=`IP ${d.ip||'—'}`;$('wifi').textContent=`${d.wifi_rssi} dBm`;
+    $('pv').textContent=fmtW(d.pv_w);$('house').textContent=fmtW(d.house_w);$('available').textContent=fmtW(d.available_w);$('heater').textContent=fmtW(d.dimmer.heater_w);$('heater2').textContent=fmtW(d.dimmer.heater_w);$('cmd').textContent=`${d.dimmer.cmd}%`;$('actual').textContent=`${tr('real')} ${d.dimmer.actual}%`;$('dimmerLine').textContent=`${tr('real')} ${d.dimmer.actual}% · Cmd ${d.dimmer.cmd}%`;$('dimmerRssi').textContent=`${d.dimmer.rssi} dBm`;$('dimmerVersion').textContent=d.dimmer.version||tr('unknown_version');$('dimmerAge').textContent=age(d.dimmer.age_ms);$('froniusAge').textContent=`Fronius ${d.fronius?'OK':'OFF'} · ${age(d.fronius_age_ms)}`;$('froniusAge2').textContent=age(d.fronius_age_ms);$('alert').textContent=d.dimmer.alert&&d.dimmer.alert!=='RAS'?d.dimmer.alert:'RAS';$('routing').textContent=statusLabel(d.status);$('mqtt').textContent=d.mqtt_connected?tr('connected'):`${tr('disconnected')} (${d.mqtt_state})`;$('heap').textContent=`${Math.round(Number(d.heap_free||0)/1024)} kB`;
+    const t=d.ecs.temp_c;$('ecsTemp').textContent=t==null?'—':Number(t).toFixed(1)+' °C';$('ecsTemp').style.color=d.ecs.at_max?'var(--red)':d.ecs.temp_hold?'var(--yellow)':tempColor(t);$('ecsMax').textContent=`Tmax ${d.ecs.max_c||'—'} °C${d.ecs.remote_max_c?' · RobotDyn':''}`;const release=d.ecs.release_c;$('ecsTrigger').textContent=release==null?`${tr('resume')} —`:`${tr('resume')} ${Number(release).toFixed(1)} °C · trigger ${d.ecs.trigger_percent==null?tr('fallback'):d.ecs.trigger_percent+' %'}`;
+    const g=Number(d.grid_w||0);if(g>20){$('grid').textContent=fmtW(g);$('grid').className='value red';$('gridMode').textContent=tr('network_import');}else if(g<-20){$('grid').textContent=fmtW(g);$('grid').className='value cyan';$('gridMode').textContent=tr('network_export');}else{$('grid').textContent='0 W';$('grid').className='value green';$('gridMode').textContent='Zero Grid';}
+    let heroBg='var(--cyan)',heroText='#071216',heroLabel='ZERO GRID',heroValue=fmtW(d.available_w),note=tr('close_zero');if(g>20){heroBg='var(--red)';heroText='#fff';heroLabel='IMPORT';heroValue=fmtW(g);note=tr('from_grid');}else if(Number(d.available_w)>2000){heroBg='var(--green)';heroText='#07120c';heroLabel=tr('available');heroValue=fmtW(d.available_w);note=tr('available_heater_note');}else if(Number(d.available_w)>20){heroBg='var(--orange)';heroText='#1b1307';heroLabel=tr('available');heroValue=fmtW(d.available_w);note=tr('available_note');}$('hero').style.background=heroBg;$('hero').style.color=heroText;$('heroLabel').textContent=heroLabel;$('heroValue').textContent=heroValue;$('heroState').textContent=statusLabel(d.status);$('heroNote').textContent=note;
     const gaugeValue=g>20?-g:Number(d.available_w||0);$('marker').style.left=markerFor(gaugeValue);
-    const r=d.regulation||{target_w:-15,low_w:-25,high_w:-5,correction_w:-15-g,heater_model_w:800,max_dimmer_percent:100,max_heater_w:800};$('target').textContent=signedW(r.target_w);$('band').textContent=`${r.low_w} … ${r.high_w} W`;$('gridMeasured').textContent=signedW(g);const correctionW=Number(r.correction_w||0),maxHeaterW=Number(r.max_heater_w??r.heater_model_w??800),heaterHeadroom=Math.max(0,maxHeaterW-Number(d.dimmer.heater_w||0)),maxDimmer=Number(r.max_dimmer_percent??100);if(correctionW>0&&d.dimmer.cmd>=maxDimmer-1&&heaterHeadroom<=5)$('correction').textContent=`Besoin ${signedW(correctionW)} · CE saturé`;else if(correctionW>0)$('correction').textContent=`Besoin ${signedW(correctionW)} · marge ${fmtW(heaterHeadroom)}`;else $('correction').textContent=signedW(correctionW);$('regCmdActual').textContent=`${d.dimmer.cmd}% / ${d.dimmer.actual}%`;$('heaterModel').textContent=`${r.heater_model_w||800} W`;
-    let chips='';chips+=chip('Fronius '+(d.fronius?'OK':'OFF'),d.fronius?'ok':'err');chips+=chip('Dimmer '+(d.dimmer.online?'OK':'OFF'),d.dimmer.online?'ok':'err');chips+=chip(d.dimmer.synced?'Synchronisé':'Synchronisation',d.dimmer.synced?'ok':'warn');chips+=chip('MQTT '+(d.mqtt_connected?'OK':'OFF'),d.mqtt_connected?'ok':'warn');if(d.ecs.at_max)chips+=chip('TEMP MAX','err');else if(d.ecs.temp_hold)chips+=chip(`ECS attente ${d.ecs.release_c==null?'reprise':Number(d.ecs.release_c).toFixed(1)+' °C'}`,'warn');else if(d.dimmer.alarm)chips+=chip('Alarme dimmer','err');else chips+=chip('ECS OK','ok');$('chips').innerHTML=chips;
-    addHistory(d);
+    const r=d.regulation||{target_w:-15,low_w:-25,high_w:-5,correction_w:-15-g,heater_model_w:800,max_dimmer_percent:100,max_heater_w:800};$('target').textContent=signedW(r.target_w);$('band').textContent=`${r.low_w} … ${r.high_w} W`;$('gridMeasured').textContent=signedW(g);const correctionW=Number(r.correction_w||0),maxHeaterW=Number(r.max_heater_w??r.heater_model_w??800),heaterHeadroom=Math.max(0,maxHeaterW-Number(d.dimmer.heater_w||0)),maxDimmer=Number(r.max_dimmer_percent??100);if(correctionW>0&&d.dimmer.cmd>=maxDimmer-1&&heaterHeadroom<=5)$('correction').textContent=`${tr('need')} ${signedW(correctionW)} · ${tr('heater_saturated')}`;else if(correctionW>0)$('correction').textContent=`${tr('need')} ${signedW(correctionW)} · ${tr('headroom')} ${fmtW(heaterHeadroom)}`;else $('correction').textContent=signedW(correctionW);$('regCmdActual').textContent=`${d.dimmer.cmd}% / ${d.dimmer.actual}%`;$('heaterModel').textContent=`${r.heater_model_w||800} W`;
+    let chips='';chips+=chip('Fronius '+(d.fronius?'OK':'OFF'),d.fronius?'ok':'err');chips+=chip('Dimmer '+(d.dimmer.online?'OK':'OFF'),d.dimmer.online?'ok':'err');chips+=chip(d.dimmer.synced?tr('synced'):tr('syncing'),d.dimmer.synced?'ok':'warn');chips+=chip('MQTT '+(d.mqtt_connected?'OK':'OFF'),d.mqtt_connected?'ok':'warn');if(d.ecs.at_max)chips+=chip('TEMP MAX','err');else if(d.ecs.temp_hold)chips+=chip(`${tr('wait_resume')} ${d.ecs.release_c==null?tr('resume').toLowerCase():Number(d.ecs.release_c).toFixed(1)+' °C'}`,'warn');else if(d.dimmer.alarm)chips+=chip(tr('alarm_dimmer'),'err');else chips+=chip('ECS OK','ok');$('chips').innerHTML=chips;
+    if(history.length===0)addHistory(d);else drawHistory();
   }
 
-  async function refresh(){try{const r=await fetch('/api/status',{cache:'no-store'});if(!r.ok)throw new Error(r.status);render(await r.json())}catch(e){document.body.classList.add('offline');$('deviceLine').textContent='Serveur indisponible';$('heroState').textContent='OFFLINE'}}
+  async function refresh(){try{const r=await fetch('/api/status',{cache:'no-store'});if(!r.ok)throw new Error(r.status);const d=await r.json();addHistory(d);render(d)}catch(e){document.body.classList.add('offline');$('deviceLine').textContent=tr('server_unavailable');$('heroState').textContent='OFFLINE'}}
   async function toggleScreen(){try{await fetch('/api/screen/toggle',{method:'POST'})}catch(e){}}
   function toast(msg){$('toast').textContent=msg;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),2200)}
   async function copyDiagnostic(){
-    if(!lastStatus){toast('Pas encore de diagnostic');return}const d=lastStatus,r=d.regulation||{};
-    const text=[`PV Router ${d.version||'—'}`,`IP: ${d.ip||'—'} | SSID: ${d.wifi_ssid||'—'} | ESP RSSI: ${d.wifi_rssi} dBm`,`Uptime: ${uptime(d.uptime_s)} | Heap: ${Math.round(Number(d.heap_free||0)/1024)} kB | MQTT: ${d.mqtt_connected?'OK':'OFF'} (${d.mqtt_state})`,`Etat: ${d.status||'—'} | Fronius: ${d.fronius?'OK':'OFF'} age=${age(d.fronius_age_ms)}`,`PV=${Math.round(d.pv_w)} W GRID=${Math.round(d.grid_w)} W HOUSE=${Math.round(d.house_w)} W DISPO=${Math.round(d.available_w)} W`,`ZeroGrid ${r.version||'V14.3'} target=${r.target_w??-15} W band=${r.low_w??-25}..${r.high_w??-5} W correction=${r.correction_w??'—'} W`,`Dimmer: online=${d.dimmer.online} sync=${d.dimmer.synced} CMD=${d.dimmer.cmd}% ACTUAL=${d.dimmer.actual}% LOAD=${d.dimmer.heater_w} W RSSI=${d.dimmer.rssi} dBm age=${age(d.dimmer.age_ms)}`,`ECS: ${d.ecs.temp_c==null?'—':Number(d.ecs.temp_c).toFixed(1)} / ${d.ecs.max_c||'—'} °C | trigger=${d.ecs.trigger_percent==null?'fallback':d.ecs.trigger_percent+'%'} | release=${d.ecs.release_c==null?'—':Number(d.ecs.release_c).toFixed(2)+'°C'} | hold=${!!d.ecs.temp_hold} | alarm=${d.dimmer.alarm} | ${d.dimmer.alert||'RAS'}`].join('\n');
-    try{await navigator.clipboard.writeText(text);toast('Diagnostic copié')}catch(e){const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();toast('Diagnostic copié')}
+    if(!lastStatus){toast(tr('no_diag'));return}const d=lastStatus,r=d.regulation||{};
+    const text=[`PV Router ${d.version||'—'}`,`IP: ${d.ip||'—'} | SSID: ${d.wifi_ssid||'—'} | ESP RSSI: ${d.wifi_rssi} dBm`,`Uptime: ${uptime(d.uptime_s)} | Heap: ${Math.round(Number(d.heap_free||0)/1024)} kB | MQTT: ${d.mqtt_connected?'OK':'OFF'} (${d.mqtt_state})`,`State: ${d.status||'—'} | Fronius: ${d.fronius?'OK':'OFF'} age=${age(d.fronius_age_ms)}`,`PV=${Math.round(d.pv_w)} W GRID=${Math.round(d.grid_w)} W HOUSE=${Math.round(d.house_w)} W AVAILABLE=${Math.round(d.available_w)} W`,`ZeroGrid ${r.version||'V14.3'} target=${r.target_w??-15} W band=${r.low_w??-25}..${r.high_w??-5} W correction=${r.correction_w??'—'} W`,`Dimmer: online=${d.dimmer.online} sync=${d.dimmer.synced} CMD=${d.dimmer.cmd}% ACTUAL=${d.dimmer.actual}% LOAD=${d.dimmer.heater_w} W RSSI=${d.dimmer.rssi} dBm age=${age(d.dimmer.age_ms)}`,`DHW: ${d.ecs.temp_c==null?'—':Number(d.ecs.temp_c).toFixed(1)} / ${d.ecs.max_c||'—'} °C | trigger=${d.ecs.trigger_percent==null?'fallback':d.ecs.trigger_percent+'%'} | release=${d.ecs.release_c==null?'—':Number(d.ecs.release_c).toFixed(2)+'°C'} | hold=${!!d.ecs.temp_hold} | alarm=${d.dimmer.alarm} | ${d.dimmer.alert||'RAS'}`].join('\n');
+    try{await navigator.clipboard.writeText(text);toast(tr('diag_copied'))}catch(e){const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();toast(tr('diag_copied'))}
   }
-  window.addEventListener('resize',()=>drawHistory());refresh();setInterval(refresh,2000);
+  applyLanguage();window.addEventListener('resize',()=>drawHistory());refresh();setInterval(refresh,2000);
 </script>
 </body>
 </html>
