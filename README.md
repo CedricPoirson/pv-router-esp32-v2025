@@ -464,7 +464,7 @@ La boucle Zero Grid ne dépend pas de MQTT. Home Assistant Discovery est disponi
 ```bash
 git clone <URL_DU_DEPOT>
 cd pv-router-esp32-v2025
-git checkout feature/fronius-zero-grid-v13-dimmer-20260514
+git checkout main
 ```
 
 Le projet utilise **PlatformIO**.
@@ -562,6 +562,11 @@ Ouvrir :
 ```text
 http://<IP_DU_ROUTEUR>/update
 ```
+
+<p align="center">
+  <img src="./img/ota.png" alt="Page de mise à jour OTA du PV Router V14.8" width="820">
+</p>
+<p align="center"><em>Interface OTA V14.8 — sélection du firmware, progression de l'envoi et redémarrage automatique après succès.</em></p>
 
 La page OTA V14.8 est une interface locale dédiée au PV Router :
 
