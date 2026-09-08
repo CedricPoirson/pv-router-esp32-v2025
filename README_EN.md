@@ -381,7 +381,7 @@ The Zero Grid loop does not depend on MQTT. Home Assistant Discovery is availabl
 ```bash
 git clone <REPOSITORY_URL>
 cd pv-router-esp32-v2025
-git checkout feature/fronius-zero-grid-v13-dimmer-20260514
+git checkout main
 ```
 
 The project uses **PlatformIO**.
@@ -471,6 +471,11 @@ Open:
 ```text
 http://<ROUTER_IP>/update
 ```
+
+<p align="center">
+  <img src="./img/ota.png" alt="PV Router V14.8 OTA update page" width="820">
+</p>
+<p align="center"><em>V14.8 OTA interface — firmware selection, upload progress and automatic reboot after success.</em></p>
 
 The V14.8 OTA interface provides:
 
