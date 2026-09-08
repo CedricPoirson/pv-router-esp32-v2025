@@ -11,6 +11,8 @@ static volatile bool gWebOtaUploadSuccess = false;
 static volatile bool gWebOtaUploadStarted = false;
 static String gWebOtaLastError;
 
+static const char PV_ROUTER_FAVICON_SVG[] PROGMEM = R"SVG(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="g" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse"><stop stop-color="#45d483"/><stop offset="1" stop-color="#48c7ef"/></linearGradient></defs><rect width="64" height="64" rx="15" fill="#0b1220"/><circle cx="18" cy="17" r="7" fill="#f8df5a"/><g stroke="#f8df5a" stroke-width="2" stroke-linecap="round"><path d="M18 5v4M18 25v4M6 17h4M26 17h4M9.5 8.5l3 3M23.5 22.5l3 3M26.5 8.5l-3 3M12.5 22.5l-3 3"/></g><path d="M10 39 31 24l23 15v16H10Z" fill="#18243a" stroke="#48c7ef" stroke-width="2" stroke-linejoin="round"/><path d="M17 39h20l-3 12H14Z" fill="url(#g)"/><path d="m42 34-8 13h6l-3 10 11-15h-6l4-8Z" fill="#f8df5a" stroke="#0b1220" stroke-width="1.3" stroke-linejoin="round"/></svg>)SVG";
+
 static const char PV_ROUTER_OTA_PAGE[] PROGMEM = R"HTML(
 <!doctype html>
 <html lang="fr">
@@ -19,7 +21,7 @@ static const char PV_ROUTER_OTA_PAGE[] PROGMEM = R"HTML(
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0b1220">
   <meta name="application-name" content="PV Router">
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon.svg?v=148" type="image/svg+xml">
   <title>PV Router · Mise à jour OTA</title>
   <style>
     :root{--bg:#0b1220;--panel:#121c2d;--panel2:#18243a;--line:#263650;--text:#f4f7fb;--muted:#93a4bd;--green:#45d483;--cyan:#48c7ef;--orange:#ffb347;--red:#ff6470;--yellow:#f8df5a}
@@ -78,8 +80,26 @@ static void webOtaRestartTask(void *parameter)
   vTaskDelete(NULL);
 }
 
+static void sendPvRouterFavicon(AsyncWebServerRequest *request)
+{
+  AsyncWebServerResponse *response =
+      request->beginResponse_P(200, "image/svg+xml", PV_ROUTER_FAVICON_SVG);
+  response->addHeader("Cache-Control", "public, max-age=86400");
+  request->send(response);
+}
+
 static void setupWebOta()
 {
+  // Register branding before the legacy SPIFFS favicon route so every Web V2
+  // page gets the same PV Router icon, even when the old favicon.ico file is
+  // still present in SPIFFS.
+  server.on("/favicon.svg", HTTP_GET, [](AsyncWebServerRequest *request) {
+    sendPvRouterFavicon(request);
+  });
+  server.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest *request) {
+    sendPvRouterFavicon(request);
+  });
+
   server.on("/update", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send_P(200, "text/html; charset=utf-8", PV_ROUTER_OTA_PAGE);
   });
