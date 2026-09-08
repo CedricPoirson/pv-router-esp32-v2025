@@ -6,7 +6,7 @@ Routeur de surplus photovoltaïque pour **ESP32 / TTGO T-Display**, basé sur la
 
 L'objectif est d'utiliser localement le surplus PV tout en restant au plus près de zéro au point de livraison, avec un léger biais volontaire vers l'export afin de limiter les micro-imports lors des variations rapides de charge ou de production.
 
-> **Firmware PV Router : V14.6**  
+> **Firmware PV Router : V14.8**  
 > **Algorithme de régulation Zero Grid : V14.3**  
 > **Interface Fronius : Solar API v1**  
 > **Endpoint Fronius : `/solar_api/v1/GetPowerFlowRealtimeData.fcgi`**  
@@ -18,13 +18,13 @@ L'objectif est d'utiliser localement le surplus PV tout en restant au plus près
 
 ## Origine, crédits et remerciements
 
-Ce projet est une **adaptation et une évolution du PV Router ESP32 de xlyric / C_Lyric** :
+Ce projet est une **adaptation et une évolution du PV Router ESP32 de Xlyric** :
 
 - projet amont : https://github.com/xlyric/pv-router-esp32
-- auteur / mainteneur amont : **xlyric / C_Lyric**
+- auteur / mainteneur amont : **Xlyric**
 - communauté associée au projet d'origine : **APPER**
 
-Un grand merci à **xlyric / C_Lyric** pour avoir publié et maintenu ce travail en open source, ainsi qu'aux contributeurs de la communauté APPER. Ce dépôt n'aurait pas existé sous cette forme sans cette base.
+Un grand merci à **Xlyric** pour avoir publié et maintenu ce travail en open source, ainsi qu'aux contributeurs de la communauté APPER. Ce dépôt n'aurait pas existé sous cette forme sans cette base.
 
 Le dimmer Wi-Fi utilisé par cette branche est également basé sur le projet du même auteur :
 
@@ -34,7 +34,7 @@ Le matériel utilisé ici est un **RobotDyn / D1 mini** piloté en HTTP. Le firm
 
 Cette adaptation diverge volontairement du routeur d'origine sur plusieurs points importants : la **source de vérité de la régulation est le Fronius Smart Meter via Fronius Solar API v1**, la boucle active n'utilise plus le SCT013 comme mesure principale, la régulation Zero Grid est prédictive, et l'interface Web / l'affichage TTGO ont été largement retravaillés.
 
-> Ce dépôt est une adaptation personnelle du projet amont ; il ne doit pas être présenté comme une version officielle publiée par xlyric ou par l'association APPER.
+> Ce dépôt est une adaptation personnelle du projet amont ; il ne doit pas être présenté comme une version officielle publiée par Xlyric ou par l'association APPER.
 
 ---
 
@@ -96,8 +96,6 @@ Le firmware interroge directement :
 GET http://<IP_FRONIUS>/solar_api/v1/GetPowerFlowRealtimeData.fcgi
 ```
 
-Il s'agit de la **Fronius Solar API v1**, endpoint PowerFlow temps réel. Cette branche ne base pas la régulation sur MQTT, Modbus ou Home Assistant.
-
 Une mesure n'est acceptée que si :
 
 - HTTP retourne 200 ;
@@ -106,17 +104,7 @@ Une mesure n'est acceptée que si :
 - `Body.Data.Site.P_Grid` existe ;
 - `P_Grid` est fini et reste dans une plage cohérente.
 
-La production PV est lue dans :
-
-```text
-Body.Data.Site.P_PV
-```
-
-avec repli éventuel sur :
-
-```text
-Body.Data.Inverters.1.P
-```
+La production PV est lue dans `Body.Data.Site.P_PV`, avec repli éventuel sur `Body.Data.Inverters.1.P`.
 
 ### Convention de signe
 
@@ -125,15 +113,20 @@ P_Grid > 0  = import depuis le réseau
 P_Grid < 0  = export vers le réseau
 ```
 
-Exemple : `P_PV=4800 W` et `P_Grid=-1200 W` signifie environ 4,8 kW de production et 1,2 kW exportés.
+### Cadence Fronius adaptative — V14.7+
 
-### Cadence Fronius
+En journée, la régulation reste rapide. Lorsqu'un Fronius est indisponible longtemps, typiquement la nuit, les requêtes sont espacées pour réduire l'activité CPU / Wi-Fi du TTGO :
 
 ```text
-Lecture PowerFlow         : toutes les 1,5 s
+Fronius ONLINE            : 1,5 s
+OFFLINE depuis < 2 min    : 5 s
+OFFLINE depuis 2 à 10 min : 15 s
+OFFLINE depuis > 10 min   : 30 s
 Timeout HTTP              : 700 ms
-Donnée considérée stale   : après 4 s
+Donnée stale régulation   : 4 s
 ```
+
+Dès qu'une réponse Fronius valide revient, la cadence normale de **1,5 s** est restaurée immédiatement.
 
 Chaque mesure Fronius validée incrémente un compteur d'échantillon. La régulation ne prend qu'une décision par nouvel échantillon validé.
 
@@ -192,8 +185,6 @@ Réserve rapide     : 25 W
 Réserve urgence    : 50 W
 ```
 
-Lorsque le dimmer est déjà à sa limite et qu'il reste du surplus, l'état peut passer à `LOAD LIMITED` : l'énergie restante est alors exportée faute de charge disponible.
-
 ---
 
 # 5. RobotDyn
@@ -206,14 +197,6 @@ Le PV Router envoie une consigne absolue :
 GET http://<IP_DIMMER>/?POWER=<0..100>
 ```
 
-Exemples :
-
-```text
-/?POWER=0
-/?POWER=25
-/?POWER=100
-```
-
 Avec une résistance calibrée à 800 W :
 
 ```text
@@ -222,39 +205,37 @@ Avec une résistance calibrée à 800 W :
 100 % ~= 800 W
 ```
 
-La valeur `/config.charge` du RobotDyn peut être différente : la régulation utilise la puissance physique configurée dans le PV Router.
-
-## État temps réel
+## État et température
 
 ```text
 GET http://<IP_DIMMER>/state
-```
-
-Le PV Router lit notamment `dimmer`, `commande`, `dallas0`, `temperature`, `RSSI`, `version`, `onoff` et `alerte`.
-
-`dallas0` est utilisé en priorité pour la température ECS, puis `temperature` en secours.
-
-Cadence :
-
-```text
-Dimmer en rattrapage / désynchronisé : ~2 s
-Dimmer synchronisé                   : ~5 s
-Timeout HTTP                         : 500 ms
-Keepalive commande                   : 60 s
-Auto-off RobotDyn de référence       : 5 min
-```
-
-## Température, Tmax et trigger
-
-Le PV Router lit aussi :
-
-```text
 GET http://<IP_DIMMER>/config
 ```
 
-Champs importants : `maxtemp`, `trigger`, `minpow`, `maxpow`, `charge`.
+Le PV Router lit notamment `dimmer`, `commande`, `dallas0`, `temperature`, `RSSI`, `version`, `onoff`, `alerte`, `maxtemp` et `trigger`.
 
-`maxtemp` du RobotDyn est prioritaire sur le `tmax` de secours du PV Router.
+`dallas0` est utilisé en priorité pour la température ECS.
+
+Cadence normale :
+
+```text
+/state désynchronisé : ~2 s
+/state synchronisé   : ~5 s
+/config              : 30 s
+Timeout HTTP         : 500 ms
+Keepalive commande   : 60 s
+```
+
+Après **10 minutes de Fronius hors ligne**, le mode éco RobotDyn s'active :
+
+```text
+/state  : 30 s
+/config : 5 min
+```
+
+Tant que `/config` n'a jamais été lu correctement, le retry reste à 10 s afin de ne pas dégrader la sécurité thermique.
+
+## Tmax et trigger
 
 Le firmware RobotDyn testé applique en arithmétique entière :
 
@@ -281,8 +262,7 @@ Si `/config` est indisponible, un repli conservateur de 2 °C est utilisé tempo
 
 Le PV Router demande `POWER=0` si :
 
-- Fronius est inaccessible ;
-- la dernière donnée Fronius a plus de 4 s ;
+- Fronius est inaccessible ou la donnée devient stale ;
 - `autonome=false` ;
 - RobotDyn remonte `onoff=false` ;
 - une alarme RobotDyn non thermique est active ;
@@ -292,9 +272,9 @@ MQTT et Home Assistant ne font pas partie de cette chaîne de sécurité.
 
 ---
 
-# 7. Première configuration Wi-Fi — V14.6
+# 7. Première configuration Wi-Fi
 
-V14.6 ajoute un **mode de configuration Wi-Fi déclenché physiquement**. Il n'apparaît jamais simplement parce que la box est en panne.
+Le mode de configuration Wi-Fi est déclenché **physiquement** et n'apparaît jamais simplement parce que la box est en panne.
 
 ## Entrer dans le mode setup
 
@@ -304,28 +284,15 @@ V14.6 ajoute un **mode de configuration Wi-Fi déclenché physiquement**. Il n'a
 4. maintenir environ **3 secondes** ;
 5. relâcher lorsque l'écran affiche `MODE CONFIG WIFI`.
 
-Le TTGO affiche :
+Connexion au portail :
 
 ```text
-Wi-Fi : PVRouter-Setup
+SSID         : PVRouter-Setup
 Mot de passe : pvrouter14
-http://192.168.4.1
+Adresse      : http://192.168.4.1
 ```
 
-Depuis un téléphone ou un ordinateur :
-
-```text
-SSID     : PVRouter-Setup
-Password : pvrouter14
-```
-
-Le portail captif peut s'ouvrir automatiquement. Sinon ouvrir :
-
-```text
-http://192.168.4.1
-```
-
-La page FR/EN propose les réseaux détectés et permet de saisir le SSID et le mot de passe du Wi-Fi de la maison. Après **Enregistrer et redémarrer**, les identifiants sont enregistrés dans `/wifi.json`, puis l'ESP32 redémarre.
+Après **Enregistrer et redémarrer**, les identifiants sont stockés dans `/wifi.json` puis l'ESP32 redémarre.
 
 Priorité des identifiants :
 
@@ -334,11 +301,7 @@ Priorité des identifiants :
 2. WIFI_NETWORK / WIFI_PASSWORD de config.h en secours
 ```
 
-La valeur historique `xxx` signifie simplement qu'aucun Wi-Fi SPIFFS valide n'est enregistré.
-
-Si le réseau domestique reste indisponible pendant `WIFI_TIMEOUT` (20 s par défaut), le boot n'est plus bloqué indéfiniment : le firmware continue en mode hors ligne et relance les connexions en arrière-plan. Le point d'accès de maintenance n'est pas ouvert automatiquement.
-
-Le portail V14.6 configure actuellement **le Wi-Fi uniquement**. L'adresse Fronius, MQTT et les autres paramètres restent configurés comme décrit plus bas.
+Si le réseau domestique reste indisponible pendant `WIFI_TIMEOUT`, le boot continue en mode hors ligne et les reconnexions se font en arrière-plan. Le point d'accès de maintenance n'est jamais ouvert automatiquement.
 
 Guides dédiés :
 
@@ -351,7 +314,7 @@ Guides dédiés :
 
 Le dashboard principal affiche : heure, température ECS/Tmax, état CE, grand bandeau `IMPORT` / `ZERO GRID` / `DISPO` / `SURPLUS`, PV, réseau, chauffe-eau, maison et jauge de puissance.
 
-Le rendu est **différentiel** : seules les zones réellement modifiées sont redessinées afin de réduire le scintillement du ST7789.
+Le rendu est **différentiel** afin de réduire le scintillement du ST7789.
 
 Appuis en fonctionnement normal :
 
@@ -360,9 +323,21 @@ Appui court : écran principal -> diagnostic -> aide -> principal
 Appui long  : écran OFF
 ```
 
-La page d'aide explique notamment `T/Tmax`, `CE OK`, `TEMP MAX`, `TEMP HOLD`, `IMPORT`, `DISPO`, `SURPLUS`, `PV`, `EXP/IMP`, `CE % / W` et `REPRISE`.
+La page diagnostic affiche notamment :
 
-Au démarrage, le boot graphique affiche le logo PV Router, les versions, une illustration du flux d'énergie et les étapes Wi-Fi / configuration / serveur Web / prêt.
+```text
+WiFi  <RSSI>  <SSID>
+IP
+Fronius
+Dimmer
+CE link
+Eau/Tmax
+Uptime
+```
+
+Le SSID utilise la même police / taille que la ligne Wi-Fi et reste mémorisé pour éviter les disparitions ponctuelles lors des rafraîchissements.
+
+Après environ 10 minutes de Fronius hors ligne, le rétroéclairage est automatiquement coupé. Un appui sur le bouton permet toujours de réveiller temporairement l'écran.
 
 ---
 
@@ -386,7 +361,7 @@ Le dashboard fournit notamment :
 - Fronius / RobotDyn / MQTT ;
 - température ECS / Tmax / trigger / reprise ;
 - cible Zero Grid, bande, correction, CMD / ACTUAL ;
-- historique navigateur d'environ 30 min sans écriture flash permanente ;
+- historique navigateur d'environ 30 min ;
 - diagnostic copiable ;
 - mémoire libre et uptime ;
 - aide de lecture de l'écran TTGO.
@@ -415,14 +390,25 @@ POST /api/screen/toggle
 POST /api/restart
 ```
 
-`/api/status` expose explicitement :
+`/api/status` expose notamment :
 
 ```text
-firmware_version       = V14.6
+firmware_version       = V14.8
 fronius_api            = Solar API v1
 fronius_powerflow_path = /solar_api/v1/GetPowerFlowRealtimeData.fcgi
 regulation.version     = V14.3
 ```
+
+### Icône Web / favicon — V14.8
+
+V14.8 ajoute une identité visuelle PV Router directement embarquée dans le firmware. Le navigateur peut récupérer :
+
+```text
+/favicon.svg
+/favicon.ico
+```
+
+Le favicon est donc disponible sans `uploadfs` et apparaît dans l'onglet / la barre d'adresse selon le navigateur. Les favicons étant fortement mis en cache, un rechargement forcé ou la réouverture de l'onglet peut être nécessaire après mise à jour.
 
 ---
 
@@ -440,9 +426,7 @@ Disponibilité :
 pvrouter/availability
 ```
 
-Le firmware publie notamment PV, réseau, maison, puissance disponible, chauffe-eau, commande/réel dimmer, température/Tmax, RSSI et états Fronius/RobotDyn.
-
-Home Assistant Discovery est disponible si `HA_ENABLED` est activé.
+La boucle Zero Grid ne dépend pas de MQTT. Home Assistant Discovery est disponible si `HA_ENABLED` est activé.
 
 ---
 
@@ -478,18 +462,12 @@ cp src/config/config.example.h src/config/config.h
 #define MQTT_PASSWORD "mon_password"
 ```
 
-Les identifiants Wi-Fi compilés sont désormais des **valeurs de secours** : un `/wifi.json` valide enregistré par le portail V14.6 est prioritaire.
+Les identifiants Wi-Fi compilés sont des **valeurs de secours** : un `/wifi.json` valide est prioritaire.
 
 Pour désactiver MQTT :
 
 ```cpp
 #define MQTT_CLIENT false
-```
-
-Pour Home Assistant Discovery :
-
-```cpp
-#define HA_ENABLED true
 ```
 
 ## Préparer SPIFFS
@@ -518,8 +496,6 @@ Dans `config.json`, vérifier au minimum :
 
 `autonome=false` est recommandé lors du premier flash. Ne passer à `true` qu'après validation du Fronius et du RobotDyn.
 
-`data/wifi.json` peut rester avec les placeholders si vous prévoyez d'utiliser le portail physique V14.6.
-
 ## Compiler et flasher
 
 ```bash
@@ -536,7 +512,7 @@ pio run -t uploadfs
 
 ### Attention à `uploadfs`
 
-`uploadfs` remplace le filesystem SPIFFS et peut donc écraser `config.json` **et `wifi.json`**.
+`uploadfs` remplace le filesystem SPIFFS et peut écraser `config.json` **et `wifi.json`**.
 
 Avant un nouvel `uploadfs`, exporter le vrai fichier de configuration complet :
 
@@ -546,13 +522,45 @@ pio run -t uploadfs
 rm data/config.json
 ```
 
-Depuis Web V2, utiliser **Exporter config.json** avant l'upload puis **Importer config.json** si nécessaire.
+Pour le Wi-Fi, soit conserver `/wifi.json`, soit relancer le portail physique après `uploadfs`.
 
-Pour le Wi-Fi, soit conserver `/wifi.json`, soit relancer simplement le portail physique après `uploadfs`.
+> La page OTA V14.8 et le favicon sont embarqués dans le **firmware** : ils ne nécessitent pas `uploadfs`.
 
 ---
 
-# 12. Vérifications après flash
+# 12. Mise à jour OTA Web — V14.8
+
+Ouvrir :
+
+```text
+http://<IP_DU_ROUTEUR>/update
+```
+
+La page OTA V14.8 est une interface locale dédiée au PV Router :
+
+- design cohérent avec le dashboard ;
+- glisser-déposer ou sélection de `firmware.bin` ;
+- nom et taille du fichier ;
+- barre de progression et pourcentage ;
+- validation du firmware ;
+- message clair en cas d'erreur ;
+- **redémarrage automatique après succès** ;
+- surveillance du retour en ligne du routeur ;
+- retour automatique vers le dashboard quand l'ESP32 répond de nouveau.
+
+Le fichier attendu est généralement :
+
+```text
+.pio/build/<ENV>/firmware.bin
+```
+
+Une mise à jour OTA du firmware **ne remplace pas SPIFFS** : `config.json`, `wifi.json` et les fichiers Web SPIFFS sont conservés.
+
+**Aucune authentification n'est actuellement appliquée à `/update`.** Cette route doit être considérée comme accessible aux appareils ayant accès au LAN.
+
+---
+
+# 13. Vérifications après flash / OTA
 
 Logs attendus :
 
@@ -565,7 +573,15 @@ start Web server
 [FRONIUS] ONLINE PV=... W GRID=... W
 [DIMMER] CONFIG OK MAX=... C TRIGGER=...% RELEASE=... C
 [DIMMER] LINK OK ACTUAL=...% CMD=...% TEMP=... C ...
-[MQTT] Connecting...connected
+```
+
+En période Fronius hors ligne, les changements de cadence peuvent apparaître :
+
+```text
+[FRONIUS] Poll interval -> 5000 ms
+[FRONIUS] Poll interval -> 15000 ms
+[FRONIUS] Poll interval -> 30000 ms
+[DIMMER] Eco polling ON
 ```
 
 Tester Fronius :
@@ -573,8 +589,6 @@ Tester Fronius :
 ```text
 http://<IP_FRONIUS>/solar_api/v1/GetPowerFlowRealtimeData.fcgi
 ```
-
-Vérifier `Head.Status.Code == 0`, `Body.Data.Site.P_Grid` et idéalement `P_PV`.
 
 Tester RobotDyn :
 
@@ -584,15 +598,9 @@ curl http://<IP_DIMMER>/config
 curl 'http://<IP_DIMMER>/?POWER=0'
 ```
 
-Modifier le trigger thermique sur le firmware RobotDyn testé :
-
-```text
-http://<IP_DIMMER>/get?trigger=3&save=1
-```
-
 ---
 
-# 13. Diagnostic rapide
+# 14. Diagnostic rapide
 
 ### `FRONIUS OFFLINE`
 
@@ -605,7 +613,7 @@ Vérifier `http://<IP_DIMMER>/state` et l'adresse RobotDyn configurée dans Web 
 ### `TEMP MAX` / `TEMP HOLD`
 
 - `TEMP MAX` : Tmax atteinte ;
-- `TEMP HOLD` : la température est redescendue mais pas encore jusqu'au seuil de reprise ;
+- `TEMP HOLD` : attente du seuil de reprise ;
 - `REPRISE xx°C` indique le seuil calculé.
 
 ### Pas de routage malgré un surplus
@@ -615,18 +623,6 @@ Vérifier dans cet ordre : Fronius ONLINE, RobotDyn ONLINE, `autonome=true`, `on
 ### Wi-Fi perdu
 
 Le firmware tente la reconnexion en arrière-plan. Pour changer volontairement de réseau, redémarrer avec le bouton GPIO35 maintenu environ 3 s.
-
----
-
-# 14. OTA
-
-```text
-http://<IP_DU_ROUTEUR>/update
-```
-
-La version actuelle utilise `AsyncElegantOTA`.
-
-**Aucune authentification n'est actuellement appliquée à `/update`.** Cette route doit donc être considérée comme accessible aux appareils ayant accès au LAN. Le champ historique `otapassword` de `config.json` n'est pas appliqué à cette route active.
 
 ---
 
@@ -646,16 +642,19 @@ src/tasks/wifi-connection.h
     connexion/reconnexion Wi-Fi et priorité wifi.json
 
 src/tasks/measure-electricity.h
-    acquisition Fronius Solar API v1
+    acquisition Fronius + cadence adaptative jour/nuit
 
 src/functions/froniusZeroGrid.h
     algorithme Zero Grid V14.3 et commandes RobotDyn
 
 src/tasks/gettemp.h
-    /state + /config RobotDyn, Dallas, Tmax, trigger et hystérésis
+    /state + /config RobotDyn, Dallas, Tmax, trigger et mode éco
 
 src/tasks/smoothDisplay.h
     rendu différentiel TTGO
+
+src/tasks/versionedDisplay.h
+    scheduler d'affichage, diagnostic et SSID Wi-Fi
 
 src/tasks/displayHelp.h
     troisième page d'aide de l'écran
@@ -665,6 +664,9 @@ src/tasks/bootScreen.h
 
 src/functions/webFunctions.h
     Web V2 et API locale
+
+src/functions/webOta.h
+    page OTA V14.8, upload firmware, validation, reboot automatique et favicon
 
 src/functions/Mqtt_http_Functions.h
     MQTT et Home Assistant Discovery
@@ -683,21 +685,26 @@ data/config.html
 
 # 16. Versions
 
-## V14.6 — firmware actuel
+## V14.8 — firmware actuel
 
-V14.6 ajoute principalement le **provisionnement Wi-Fi physique au boot** : maintien du bouton 3 s, point d'accès `PVRouter-Setup`, portail captif à `192.168.4.1`, sauvegarde dans `wifi.json`, priorité aux identifiants enregistrés et démarrage non bloquant si le Wi-Fi domestique est indisponible.
+V14.8 ajoute principalement :
 
-Il conserve :
+- nouvelle page OTA intégrée au design Web V2 ;
+- upload `.bin` avec progression ;
+- validation et **reboot automatique après succès** ;
+- retour automatique au dashboard après redémarrage ;
+- favicon / identité visuelle PV Router embarqués dans le firmware.
 
-- **Zero Grid V14.3** ;
-- Fronius **Solar API v1** comme source de vérité ;
-- RobotDyn HTTP + sécurité thermique ;
-- Web V2, MQTT/HA ;
-- boot graphique ;
-- affichage TTGO différentiel et page d'aide.
+## V14.7
+
+V14.7 ajoute le **mode éco réseau** : cadence Fronius adaptative de 1,5 s à 30 s lorsque l'onduleur reste hors ligne et cadence RobotDyn ralentie après 10 minutes d'indisponibilité Fronius.
+
+## V14.6
+
+V14.6 a introduit le **provisionnement Wi-Fi physique au boot** avec maintien du bouton 3 s, point d'accès `PVRouter-Setup`, portail captif à `192.168.4.1`, sauvegarde dans `wifi.json` et démarrage non bloquant.
 
 ```text
-PV Router firmware      : V14.6
+PV Router firmware      : V14.8
 Zero Grid algorithm     : V14.3
 Fronius interface       : Solar API v1
 RobotDyn firmware testé : Version 20260514
