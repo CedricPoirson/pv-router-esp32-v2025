@@ -13,8 +13,13 @@
 #include <ArduinoJson.h>
 #include <math.h>
 
-#define FRONIUS_HTTP_TIMEOUT_MS 700UL
-#define FRONIUS_POLL_INTERVAL_MS 1500UL
+#define FRONIUS_HTTP_TIMEOUT_MS            700UL
+#define FRONIUS_POLL_INTERVAL_MS          1500UL
+#define FRONIUS_OFFLINE_POLL_0_2MIN_MS    5000UL
+#define FRONIUS_OFFLINE_POLL_2_10MIN_MS  15000UL
+#define FRONIUS_OFFLINE_POLL_10MIN_MS    30000UL
+#define FRONIUS_OFFLINE_STAGE1_MS       120000UL
+#define FRONIUS_OFFLINE_STAGE2_MS       600000UL
 
 extern DisplayValues gDisplayValues;
 extern Config config;
@@ -29,6 +34,8 @@ void measureElectricityf(void * parameter)
 
     bool froniusStateKnown = false;
     bool previousFroniusOk = false;
+    unsigned long froniusOfflineSinceMs = 0;
+    unsigned long previousPollIntervalMs = FRONIUS_POLL_INTERVAL_MS;
 
     for (;;) {
         const unsigned long cycleStartMs = millis();
@@ -110,6 +117,7 @@ void measureElectricityf(void * parameter)
         if (validFroniusSample) {
             gDisplayValues.froniusLastOkMs = millis();
             gFroniusSampleCounter++;
+            froniusOfflineSinceMs = 0;
 
             if (!froniusStateKnown || !previousFroniusOk) {
                 Serial.printf("[FRONIUS] ONLINE PV=%.0f W GRID=%.0f W\n",
@@ -117,8 +125,13 @@ void measureElectricityf(void * parameter)
                               gDisplayValues.grid);
             }
         }
-        else if (!froniusStateKnown || previousFroniusOk) {
-            Serial.printf("[FRONIUS] OFFLINE (%s)\n", errorReason.c_str());
+        else {
+            if (froniusOfflineSinceMs == 0)
+                froniusOfflineSinceMs = millis();
+
+            if (!froniusStateKnown || previousFroniusOk) {
+                Serial.printf("[FRONIUS] OFFLINE (%s)\n", errorReason.c_str());
+            }
         }
 
         froniusStateKnown = true;
@@ -130,10 +143,30 @@ void measureElectricityf(void * parameter)
 #endif
 #endif
 
+        // Adaptive polling drastically reduces Wi-Fi/CPU activity when the
+        // inverter has been offline for a long time (typically at night),
+        // while returning immediately to the normal 1.5 s cadence as soon as
+        // a valid Fronius response is received.
+        unsigned long pollIntervalMs = FRONIUS_POLL_INTERVAL_MS;
+        if (!gDisplayValues.froniusup && froniusOfflineSinceMs != 0) {
+            const unsigned long offlineMs = millis() - froniusOfflineSinceMs;
+            if (offlineMs >= FRONIUS_OFFLINE_STAGE2_MS)
+                pollIntervalMs = FRONIUS_OFFLINE_POLL_10MIN_MS;
+            else if (offlineMs >= FRONIUS_OFFLINE_STAGE1_MS)
+                pollIntervalMs = FRONIUS_OFFLINE_POLL_2_10MIN_MS;
+            else
+                pollIntervalMs = FRONIUS_OFFLINE_POLL_0_2MIN_MS;
+        }
+
+        if (pollIntervalMs != previousPollIntervalMs) {
+            Serial.printf("[FRONIUS] Poll interval -> %lu ms\n", pollIntervalMs);
+            previousPollIntervalMs = pollIntervalMs;
+        }
+
         const unsigned long elapsedMs = millis() - cycleStartMs;
         const unsigned long waitMs =
-            (elapsedMs < FRONIUS_POLL_INTERVAL_MS)
-                ? (FRONIUS_POLL_INTERVAL_MS - elapsedMs)
+            (elapsedMs < pollIntervalMs)
+                ? (pollIntervalMs - elapsedMs)
                 : 1UL;
 
         vTaskDelay(waitMs / portTICK_PERIOD_MS);
