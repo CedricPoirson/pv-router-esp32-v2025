@@ -21,7 +21,7 @@ static const char PV_ROUTER_OTA_PAGE[] PROGMEM = R"HTML(
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0b1220">
   <meta name="application-name" content="PV Router">
-  <link rel="icon" href="/favicon.svg?v=148" type="image/svg+xml">
+  <link rel="icon" href="/favicon.svg?v=149" type="image/svg+xml">
   <title>PV Router · Mise à jour OTA</title>
   <style>
     :root{--bg:#0b1220;--panel:#121c2d;--panel2:#18243a;--line:#263650;--text:#f4f7fb;--muted:#93a4bd;--green:#45d483;--cyan:#48c7ef;--orange:#ffb347;--red:#ff6470;--yellow:#f8df5a}
@@ -31,41 +31,50 @@ static const char PV_ROUTER_OTA_PAGE[] PROGMEM = R"HTML(
 <body>
 <div class="wrap">
   <div class="top">
-    <div class="brand"><div class="logo">PV</div><div><h1>Mise à jour OTA</h1><div class="sub">PV Router · <span id="fw">firmware actuel…</span></div></div></div>
-    <a class="back" href="/">← Dashboard</a>
+    <div class="brand"><div class="logo">PV</div><div><h1 data-i18n="ota_title">Mise à jour OTA</h1><div class="sub">PV Router · <span id="fw" data-i18n="current_fw">firmware actuel…</span></div></div></div>
+    <a class="back" href="/" data-i18n="back_dashboard">← Dashboard</a>
   </div>
 
   <section class="card">
-    <div class="head"><div><h2>Installer un nouveau firmware</h2><div class="muted">Sélectionne le fichier <strong>.bin</strong> généré par PlatformIO. La configuration SPIFFS est conservée.</div></div><div class="pill">Firmware uniquement</div></div>
+    <div class="head"><div><h2 data-i18n="install_new">Installer un nouveau firmware</h2><div class="muted" data-i18n-html="select_bin">Sélectionne le fichier <strong>.bin</strong> généré par PlatformIO. La configuration SPIFFS est conservée.</div></div><div class="pill" data-i18n="firmware_only">Firmware uniquement</div></div>
 
     <input class="hidden" id="fileInput" type="file" accept=".bin,application/octet-stream">
     <div class="drop" id="dropZone" tabindex="0">
       <div class="uploadIcon">↑</div>
-      <strong>Déposer le firmware ici</strong>
-      <div class="muted">ou toucher pour choisir le fichier <code>firmware.bin</code></div>
+      <strong data-i18n="drop_here">Déposer le firmware ici</strong>
+      <div class="muted" data-i18n-html="touch_choose">ou toucher pour choisir le fichier <code>firmware.bin</code></div>
     </div>
 
-    <div class="file" id="fileInfo"><div><div class="fileName" id="fileName">—</div><div class="fileSize" id="fileMeta">—</div></div><button class="btn secondary" style="flex:0 0 auto;padding:8px 10px" id="changeBtn">Changer</button></div>
+    <div class="file" id="fileInfo"><div><div class="fileName" id="fileName">—</div><div class="fileSize" id="fileMeta">—</div></div><button class="btn secondary" style="flex:0 0 auto;padding:8px 10px" id="changeBtn" data-i18n="change">Changer</button></div>
 
-    <div class="progressWrap" id="progressWrap"><div class="progressTop"><span id="progressLabel">Envoi du firmware…</span><strong id="progressPct">0 %</strong></div><div class="bar"><div class="fill" id="progressFill"></div></div></div>
+    <div class="progressWrap" id="progressWrap"><div class="progressTop"><span id="progressLabel" data-i18n="uploading">Envoi du firmware…</span><strong id="progressPct">0 %</strong></div><div class="bar"><div class="fill" id="progressFill"></div></div></div>
 
-    <div class="notice"><span>⚠</span><div><strong>Ne coupe pas l’alimentation pendant la mise à jour.</strong><br>Après validation du firmware, le PV Router redémarrera automatiquement.</div></div>
+    <div class="notice"><span>⚠</span><div data-i18n-html="warning"><strong>Ne coupe pas l’alimentation pendant la mise à jour.</strong><br>Après validation du firmware, le PV Router redémarrera automatiquement.</div></div>
 
-    <div class="actions"><button class="btn primary" id="uploadBtn" disabled>Installer le firmware</button><a class="btn secondary" href="/" style="text-align:center;text-decoration:none">Annuler</a></div>
+    <div class="actions"><button class="btn primary" id="uploadBtn" disabled data-i18n="install">Installer le firmware</button><a class="btn secondary" href="/" style="text-align:center;text-decoration:none" data-i18n="cancel">Annuler</a></div>
 
     <div class="status" id="statusBox"><h3 id="statusTitle"></h3><div class="muted" id="statusText"></div></div>
   </section>
-  <div class="foot">Interface locale · aucune connexion Internet requise</div>
+  <div class="foot" data-i18n="local_only">Interface locale · aucune connexion Internet requise</div>
 </div>
 <script>
+const LANG_KEY='pvrouter_lang',lang=localStorage.getItem(LANG_KEY)==='en'?'en':'fr';
+const T={
+  fr:{page_title:'PV Router · Mise à jour OTA',ota_title:'Mise à jour OTA',current_fw:'firmware actuel…',back_dashboard:'← Dashboard',install_new:'Installer un nouveau firmware',select_bin:'Sélectionne le fichier <strong>.bin</strong> généré par PlatformIO. La configuration SPIFFS est conservée.',firmware_only:'Firmware uniquement',drop_here:'Déposer le firmware ici',touch_choose:'ou toucher pour choisir le fichier <code>firmware.bin</code>',change:'Changer',uploading:'Envoi du firmware…',warning:'<strong>Ne coupe pas l’alimentation pendant la mise à jour.</strong><br>Après validation du firmware, le PV Router redémarrera automatiquement.',install:'Installer le firmware',cancel:'Annuler',local_only:'Interface locale · aucune connexion Internet requise',invalid_file:'Fichier invalide',invalid_file_help:'Choisis un firmware PlatformIO au format .bin.',restarting:'Redémarrage du PV Router…',online_again:'PV Router de nouveau en ligne',restart_done:'Redémarrage terminé. Retour au dashboard…',restart_slow:'Le firmware a été installé. Le redémarrage prend plus de temps que prévu ; recharge la page dans quelques instants.',installed:'Firmware installé',validation_ok:'Validation réussie. Le redémarrage automatique commence maintenant…',update_failed:'Échec de la mise à jour',connection_lost:'Connexion interrompue',connection_lost_help:'Le transfert n’a pas abouti. Le PV Router n’a pas validé le nouveau firmware.',http_error:'Erreur HTTP'},
+  en:{page_title:'PV Router · OTA update',ota_title:'OTA update',current_fw:'current firmware…',back_dashboard:'← Dashboard',install_new:'Install new firmware',select_bin:'Select the <strong>.bin</strong> file generated by PlatformIO. SPIFFS configuration is preserved.',firmware_only:'Firmware only',drop_here:'Drop firmware here',touch_choose:'or tap to select <code>firmware.bin</code>',change:'Change',uploading:'Uploading firmware…',warning:'<strong>Do not cut power during the update.</strong><br>After firmware validation, the PV Router will restart automatically.',install:'Install firmware',cancel:'Cancel',local_only:'Local interface · no Internet connection required',invalid_file:'Invalid file',invalid_file_help:'Choose a PlatformIO firmware file in .bin format.',restarting:'Restarting PV Router…',online_again:'PV Router is back online',restart_done:'Restart complete. Returning to dashboard…',restart_slow:'The firmware was installed. Restart is taking longer than expected; reload the page in a few moments.',installed:'Firmware installed',validation_ok:'Validation succeeded. Automatic restart is starting now…',update_failed:'Update failed',connection_lost:'Connection interrupted',connection_lost_help:'The transfer did not complete. The PV Router did not validate the new firmware.',http_error:'HTTP error'}
+};
+const tr=k=>(T[lang]&&T[lang][k])||T.fr[k]||k;
+function applyLanguage(){document.documentElement.lang=lang;document.title=tr('page_title');document.querySelectorAll('[data-i18n]').forEach(el=>el.textContent=tr(el.dataset.i18n));document.querySelectorAll('[data-i18n-html]').forEach(el=>el.innerHTML=tr(el.dataset.i18nHtml))}
+function localizeServerError(message){if(lang!=='en')return message;const map={'Firmware non valide ou ecriture impossible':'Invalid firmware or unable to write firmware','Le fichier doit etre un firmware .bin':'The file must be a .bin firmware image','Impossible de preparer la partition OTA':'Unable to prepare the OTA partition',"Erreur pendant l'ecriture du firmware":'Error while writing firmware','Validation finale du firmware impossible':'Final firmware validation failed'};return map[message]||message}
+applyLanguage();
 const input=document.getElementById('fileInput'),drop=document.getElementById('dropZone'),info=document.getElementById('fileInfo'),nameEl=document.getElementById('fileName'),meta=document.getElementById('fileMeta'),upload=document.getElementById('uploadBtn'),change=document.getElementById('changeBtn'),wrap=document.getElementById('progressWrap'),fill=document.getElementById('progressFill'),pct=document.getElementById('progressPct'),label=document.getElementById('progressLabel'),box=document.getElementById('statusBox'),title=document.getElementById('statusTitle'),text=document.getElementById('statusText');
 let selected=null,busy=false;
 fetch('/api/status',{cache:'no-store'}).then(r=>r.json()).then(s=>document.getElementById('fw').textContent=s.firmware_version||s.version||'PV Router').catch(()=>document.getElementById('fw').textContent='PV Router');
-function choose(f){if(!f||busy)return;if(!f.name.toLowerCase().endsWith('.bin')){showError('Fichier invalide','Choisis un firmware PlatformIO au format .bin.');return}selected=f;nameEl.textContent=f.name;meta.textContent=(f.size/1024/1024).toFixed(2)+' Mo';info.classList.add('show');box.className='status';upload.disabled=false}
+function choose(f){if(!f||busy)return;if(!f.name.toLowerCase().endsWith('.bin')){showError(tr('invalid_file'),tr('invalid_file_help'));return}selected=f;nameEl.textContent=f.name;meta.textContent=(f.size/1024/1024).toFixed(2)+(lang==='fr'?' Mo':' MB');info.classList.add('show');box.className='status';upload.disabled=false}
 function openPicker(){if(!busy)input.click()}drop.onclick=openPicker;drop.onkeydown=e=>{if(e.key==='Enter'||e.key===' ')openPicker()};input.onchange=()=>choose(input.files[0]);change.onclick=openPicker;['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('drag')}));['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('drag')}));drop.addEventListener('drop',e=>choose(e.dataTransfer.files[0]));
 function showError(t,m){box.className='status show err';title.textContent=t;text.textContent=m}
-function waitForRouter(){let tries=0;label.innerHTML='<span class="spinner"></span>Redémarrage du PV Router…';pct.textContent='100 %';fill.style.width='100%';const timer=setInterval(()=>{tries++;fetch('/api/status?ota='+Date.now(),{cache:'no-store'}).then(r=>{if(!r.ok)throw 0;return r.json()}).then(()=>{clearInterval(timer);label.textContent='PV Router de nouveau en ligne';text.textContent='Redémarrage terminé. Retour au dashboard…';setTimeout(()=>location.href='/',900)}).catch(()=>{if(tries>45){clearInterval(timer);text.textContent='Le firmware a été installé. Le redémarrage prend plus de temps que prévu ; recharge la page dans quelques instants.'}})},1200)}
-upload.onclick=()=>{if(!selected||busy)return;busy=true;upload.disabled=true;change.disabled=true;drop.style.pointerEvents='none';box.className='status';wrap.classList.add('show');fill.style.width='0%';pct.textContent='0 %';label.textContent='Envoi du firmware…';const form=new FormData();form.append('firmware',selected,selected.name);const xhr=new XMLHttpRequest();xhr.open('POST','/update',true);xhr.upload.onprogress=e=>{if(e.lengthComputable){const p=Math.min(99,Math.round(e.loaded/e.total*100));fill.style.width=p+'%';pct.textContent=p+' %'}};xhr.onload=()=>{let data={};try{data=JSON.parse(xhr.responseText)}catch(e){}if(xhr.status===200&&data.ok){fill.style.width='100%';pct.textContent='100 %';box.className='status show ok';title.textContent='Firmware installé';text.textContent='Validation réussie. Le redémarrage automatique commence maintenant…';waitForRouter()}else{busy=false;upload.disabled=false;change.disabled=false;drop.style.pointerEvents='';showError('Échec de la mise à jour',data.error||('Erreur HTTP '+xhr.status))}};xhr.onerror=()=>{busy=false;upload.disabled=false;change.disabled=false;drop.style.pointerEvents='';showError('Connexion interrompue','Le transfert n’a pas abouti. Le PV Router n’a pas validé le nouveau firmware.')};xhr.send(form)};
+function waitForRouter(){let tries=0;label.innerHTML='<span class="spinner"></span>'+tr('restarting');pct.textContent='100 %';fill.style.width='100%';const timer=setInterval(()=>{tries++;fetch('/api/status?ota='+Date.now(),{cache:'no-store'}).then(r=>{if(!r.ok)throw 0;return r.json()}).then(()=>{clearInterval(timer);label.textContent=tr('online_again');text.textContent=tr('restart_done');setTimeout(()=>location.href='/',900)}).catch(()=>{if(tries>45){clearInterval(timer);text.textContent=tr('restart_slow')}})},1200)}
+upload.onclick=()=>{if(!selected||busy)return;busy=true;upload.disabled=true;change.disabled=true;drop.style.pointerEvents='none';box.className='status';wrap.classList.add('show');fill.style.width='0%';pct.textContent='0 %';label.textContent=tr('uploading');const form=new FormData();form.append('firmware',selected,selected.name);const xhr=new XMLHttpRequest();xhr.open('POST','/update',true);xhr.upload.onprogress=e=>{if(e.lengthComputable){const p=Math.min(99,Math.round(e.loaded/e.total*100));fill.style.width=p+'%';pct.textContent=p+' %'}};xhr.onload=()=>{let data={};try{data=JSON.parse(xhr.responseText)}catch(e){}if(xhr.status===200&&data.ok){fill.style.width='100%';pct.textContent='100 %';box.className='status show ok';title.textContent=tr('installed');text.textContent=tr('validation_ok');waitForRouter()}else{busy=false;upload.disabled=false;change.disabled=false;drop.style.pointerEvents='';showError(tr('update_failed'),localizeServerError(data.error||(`${tr('http_error')} ${xhr.status}`)))}};xhr.onerror=()=>{busy=false;upload.disabled=false;change.disabled=false;drop.style.pointerEvents='';showError(tr('connection_lost'),tr('connection_lost_help'))};xhr.send(form)};
 </script>
 </body>
 </html>
