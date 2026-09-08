@@ -6,7 +6,6 @@
 #include "config/enums.h"
 #include "config/traduction.h"
 #include <NTPClient.h>
-#include <AsyncElegantOTA.h>
 
 // File System
 #include <FS.h>
@@ -36,6 +35,7 @@
 #include "functions/otaFunctions.h"
 #include "functions/Mqtt_http_Functions.h"
 #include "functions/webFunctions.h"
+#include "functions/webOta.h"
 
 #if DIMMERLOCAL
 #include "functions/dimmerFunction.h"
@@ -183,6 +183,9 @@ void setup()
       //************* Setup - démarrage du webserver et affichage de l'oled
       //***********************************
       Serial.println("start Web server");
+      // Register the OTA/branding routes first. This intentionally takes
+      // precedence over the historical SPIFFS /favicon.ico handler.
+      setupWebOta();
       call_pages();
       #ifdef TTGO
         drawTTGOGraphicalBootScreen("SERVEUR WEB OK", gDisplayValues.IP, 90);
@@ -306,7 +309,6 @@ void setup()
 
   #if WIFI_ACTIVE == true
     #if WEBSSERVER == true
-      AsyncElegantOTA.begin(&server);
       server.begin();
     #endif
 
