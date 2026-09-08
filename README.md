@@ -12,7 +12,10 @@ L'objectif est d'utiliser localement le surplus PV tout en restant au plus près
 > **Endpoint Fronius : `/solar_api/v1/GetPowerFlowRealtimeData.fcgi`**  
 > **Dimmer RobotDyn testé : firmware `Version 20260514`**
 
-![Routeur TTGO](./img/routeur.jpg)
+<p align="center">
+  <img src="./img/page-web.png" alt="Dashboard Web PV Router V14.8" width="920">
+</p>
+<p align="center"><em>Dashboard Web V14.8 — production PV, réseau, chauffe-eau, température ECS et régulation Zero Grid.</em></p>
 
 ---
 
@@ -303,6 +306,12 @@ Priorité des identifiants :
 
 Si le réseau domestique reste indisponible pendant `WIFI_TIMEOUT`, le boot continue en mode hors ligne et les reconnexions se font en arrière-plan. Le point d'accès de maintenance n'est jamais ouvert automatiquement.
 
+### Démarrage graphique
+
+| Connexion Wi-Fi | Serveur Web prêt |
+| --- | --- |
+| <img src="./img/boot-connexion-wifi.jpeg" alt="Boot TTGO connexion Wi-Fi" width="360"> | <img src="./img/boot-serveur-web.jpeg" alt="Boot TTGO serveur Web" width="360"> |
+
 Guides dédiés :
 
 - [Première configuration Wi-Fi — français](./docs/WIFI_SETUP_FR.md)
@@ -322,6 +331,18 @@ Appuis en fonctionnement normal :
 Appui court : écran principal -> diagnostic -> aide -> principal
 Appui long  : écran OFF
 ```
+
+### États principaux du routeur
+
+| Énergie disponible | Surplus | Import réseau |
+| --- | --- | --- |
+| <img src="./img/energie-dispo.jpeg" alt="TTGO énergie disponible" width="260"> | <img src="./img/energie-surplus.jpeg" alt="TTGO surplus photovoltaïque" width="260"> | <img src="./img/import.jpeg" alt="TTGO import réseau" width="260"> |
+
+### Diagnostic et perte Fronius
+
+| Diagnostic | Fronius indisponible |
+| --- | --- |
+| <img src="./img/diag.jpeg" alt="Page diagnostic TTGO" width="360"> | <img src="./img/fronius-down.jpeg" alt="TTGO Fronius hors ligne" width="360"> |
 
 La page diagnostic affiche notamment :
 
@@ -365,6 +386,12 @@ Le dashboard fournit notamment :
 - diagnostic copiable ;
 - mémoire libre et uptime ;
 - aide de lecture de l'écran TTGO.
+
+### Aperçu Web
+
+| Dashboard temps réel | Diagnostic / détails |
+| --- | --- |
+| <img src="./img/page-web.png" alt="Dashboard Web PV Router" width="470"> | <img src="./img/page-weg-diag.png" alt="Diagnostic Web PV Router" width="470"> |
 
 Paramètres actuellement éditables depuis Web V2 :
 
