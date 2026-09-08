@@ -16,11 +16,14 @@ extern Config config;
 extern volatile bool gDisplayForceRefresh;
 #endif
 
-#define DIMMER_STATE_POLL_SYNC_MS      5000UL
-#define DIMMER_STATE_POLL_CATCHUP_MS   2000UL
-#define DIMMER_STATE_HTTP_TIMEOUT_MS    500UL
-#define DIMMER_CONFIG_POLL_MS          30000UL
-#define DIMMER_CONFIG_RETRY_MS         10000UL
+#define DIMMER_STATE_POLL_SYNC_MS          5000UL
+#define DIMMER_STATE_POLL_CATCHUP_MS       2000UL
+#define DIMMER_STATE_POLL_ECO_MS          30000UL
+#define DIMMER_STATE_HTTP_TIMEOUT_MS        500UL
+#define DIMMER_CONFIG_POLL_MS             30000UL
+#define DIMMER_CONFIG_RETRY_MS            10000UL
+#define DIMMER_CONFIG_POLL_ECO_MS        300000UL
+#define DIMMER_ECO_AFTER_FRONIUS_OFF_MS  600000UL
 #define DIMMER_ECS_FALLBACK_HYSTERESIS_C   2.0f
 
 void GetDImmerTemp(void * parameter){
@@ -30,6 +33,8 @@ void GetDImmerTemp(void * parameter){
   bool previousLinkOk = false;
   bool configKnown = false;
   unsigned long lastConfigAttemptMs = 0;
+  unsigned long froniusOfflineSinceMs = 0;
+  bool previousEcoMode = false;
 
   // -1 means the RobotDyn trigger has not been read yet. The normal path uses
   // the exact RobotDyn percentage hysteresis. The former fixed 2 C hysteresis
@@ -50,16 +55,39 @@ void GetDImmerTemp(void * parameter){
 
   for (;;) {
     const unsigned long now = millis();
-    unsigned long nextPollMs = DIMMER_STATE_POLL_CATCHUP_MS;
+
+    if (gDisplayValues.froniusup) {
+      froniusOfflineSinceMs = 0;
+    }
+    else if (froniusOfflineSinceMs == 0) {
+      froniusOfflineSinceMs = now;
+    }
+
+    const bool ecoMode =
+        !gDisplayValues.froniusup &&
+        froniusOfflineSinceMs != 0 &&
+        (unsigned long)(now - froniusOfflineSinceMs) >= DIMMER_ECO_AFTER_FRONIUS_OFF_MS;
+
+    if (ecoMode != previousEcoMode) {
+      Serial.printf("[DIMMER] Eco polling %s\n", ecoMode ? "ON" : "OFF");
+      previousEcoMode = ecoMode;
+    }
+
+    unsigned long nextPollMs =
+        ecoMode ? DIMMER_STATE_POLL_ECO_MS
+                : DIMMER_STATE_POLL_CATCHUP_MS;
     bool currentLinkOk = false;
     String errorReason = "unknown";
 
     // /config contains the real normal ECS maximum temperature (maxtemp) and
-    // RobotDyn thermal hysteresis (trigger). Poll it once at startup, retry
-    // reasonably fast until it succeeds, then refresh every 30 seconds so a
-    // user setpoint/trigger change is picked up quickly.
+    // RobotDyn thermal hysteresis (trigger). While config is still unknown,
+    // keep the normal 10 s retry for safety. Once known, slow it to 5 minutes
+    // after a prolonged Fronius outage (typically at night).
     const unsigned long configInterval =
-        configKnown ? DIMMER_CONFIG_POLL_MS : DIMMER_CONFIG_RETRY_MS;
+        !configKnown
+            ? DIMMER_CONFIG_RETRY_MS
+            : (ecoMode ? DIMMER_CONFIG_POLL_ECO_MS
+                       : DIMMER_CONFIG_POLL_MS);
 
     if (lastConfigAttemptMs == 0 ||
         (unsigned long)(now - lastConfigAttemptMs) >= configInterval) {
@@ -173,10 +201,6 @@ void GetDImmerTemp(void * parameter){
               gDisplayValues.dimmerAlert.length() > 0 &&
               !gDisplayValues.dimmerAlert.equalsIgnoreCase("RAS");
 
-          // RobotDyn can keep "Alerte Température" active briefly after the
-          // maxtemp is raised. Distinguish this specific alert from all other
-          // alarms so a stale temperature alert cannot permanently block the
-          // router once the water is safely below the new release threshold.
           const bool remoteTemperatureAlarm =
               remoteAlarm &&
               (gDisplayValues.dimmerAlert.indexOf("Temp") >= 0 ||
@@ -204,10 +228,6 @@ void GetDImmerTemp(void * parameter){
 
           if (temperatureKnown) {
             if (!ecsTempLimitActive) {
-              // A local threshold crossing always latches the stop. If the
-              // RobotDyn itself reports a temperature alarm close to Tmax,
-              // latch it too and require the same RobotDyn trigger threshold
-              // before restart.
               if (waterTemp >= (float)effectiveMaxTemp ||
                   (remoteTemperatureAlarm && waterTemp > releaseTemp)) {
                 ecsTempLimitActive = true;
@@ -218,8 +238,6 @@ void GetDImmerTemp(void * parameter){
             }
           }
           else if (remoteTemperatureAlarm) {
-            // Without a trustworthy Dallas reading, remain conservative and
-            // honour the RobotDyn temperature alarm.
             ecsTempLimitActive = true;
           }
 
@@ -265,9 +283,6 @@ void GetDImmerTemp(void * parameter){
           previousOtherRemoteAlert =
               otherRemoteAlarm ? gDisplayValues.dimmerAlert : "";
 
-          // Any non-temperature RobotDyn alarm remains an unconditional
-          // fail-safe. Temperature protection uses the local latch aligned to
-          // the RobotDyn trigger whenever it is available.
           gDisplayValues.dimmerAlarm =
               otherRemoteAlarm || ecsTempLimitActive;
 
@@ -278,8 +293,10 @@ void GetDImmerTemp(void * parameter){
           int commandedDimmer = constrain(gDisplayValues.dimmer, 0, 100);
           const bool synced =
               abs(commandedDimmer - gDisplayValues.dimmerReported) <= 2;
-          nextPollMs = synced ? DIMMER_STATE_POLL_SYNC_MS
-                              : DIMMER_STATE_POLL_CATCHUP_MS;
+          nextPollMs = ecoMode
+                           ? DIMMER_STATE_POLL_ECO_MS
+                           : (synced ? DIMMER_STATE_POLL_SYNC_MS
+                                     : DIMMER_STATE_POLL_CATCHUP_MS);
 
           if (!linkStateKnown || !previousLinkOk) {
             if (gDisplayValues.dimmerTriggerPercent >= 0) {
@@ -326,9 +343,6 @@ void GetDImmerTemp(void * parameter){
     }
 
     if (!currentLinkOk) {
-      // Never keep displaying a stale live temperature. Keep the last valid
-      // maxtemp/trigger from /config: they are configuration data, not live
-      // measurements.
       gDisplayValues.temperature = "";
     }
 
