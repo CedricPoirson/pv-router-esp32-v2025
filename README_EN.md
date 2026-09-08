@@ -12,7 +12,10 @@ The goal is to consume PV surplus locally while keeping grid exchange as close t
 > **Fronius endpoint: `/solar_api/v1/GetPowerFlowRealtimeData.fcgi`**  
 > **Tested RobotDyn dimmer firmware: `Version 20260514`**
 
-![TTGO Router](./img/routeur.jpg)
+<p align="center">
+  <img src="./img/page-web.png" alt="PV Router V14.8 Web dashboard" width="920">
+</p>
+<p align="center"><em>V14.8 Web dashboard — PV production, grid exchange, water heater, DHW temperature and Zero Grid regulation.</em></p>
 
 ---
 
@@ -255,6 +258,12 @@ Credential priority:
 2. WIFI_NETWORK / WIFI_PASSWORD from config.h as fallback
 ```
 
+### Graphical boot
+
+| Wi-Fi connection | Web server ready |
+| --- | --- |
+| <img src="./img/boot-connexion-wifi.jpeg" alt="TTGO boot Wi-Fi connection" width="360"> | <img src="./img/boot-serveur-web.jpeg" alt="TTGO boot Web server" width="360"> |
+
 Dedicated guides:
 
 - [Première configuration Wi-Fi — français](./docs/WIFI_SETUP_FR.md)
@@ -264,12 +273,26 @@ Dedicated guides:
 
 # 8. TTGO display
 
+The main screen shows time, DHW temperature/Tmax, heater state, the large `IMPORT` / `ZERO GRID` / `DISPO` / `SURPLUS` banner, PV, grid, heater, house and the power gauge.
+
 Normal button behavior:
 
 ```text
 Short press : main -> diagnostics -> help -> main
 Long press  : screen OFF
 ```
+
+### Main router states
+
+| Energy available | Surplus | Grid import |
+| --- | --- | --- |
+| <img src="./img/energie-dispo.jpeg" alt="TTGO energy available" width="260"> | <img src="./img/energie-surplus.jpeg" alt="TTGO PV surplus" width="260"> | <img src="./img/import.jpeg" alt="TTGO grid import" width="260"> |
+
+### Diagnostics and Fronius outage
+
+| Diagnostics | Fronius unavailable |
+| --- | --- |
+| <img src="./img/diag.jpeg" alt="TTGO diagnostics page" width="360"> | <img src="./img/fronius-down.jpeg" alt="TTGO Fronius offline" width="360"> |
 
 The diagnostics page shows Wi-Fi RSSI and SSID, IP, Fronius, Dimmer, CE link, DHW/Tmax and uptime. The SSID uses the same font/size as the Wi-Fi line and is cached to avoid intermittent disappearance during redraws.
 
@@ -292,6 +315,12 @@ http://<ROUTER_IP>/config.html
 ```
 
 The dashboard includes PV / grid / house / heater, Fronius / RobotDyn / MQTT states, DHW temperature / Tmax / trigger / release, Zero Grid diagnostics, about 30 minutes of browser-side history, copyable diagnostics, free heap, uptime and TTGO screen help.
+
+### Web preview
+
+| Real-time dashboard | Diagnostics / details |
+| --- | --- |
+| <img src="./img/page-web.png" alt="PV Router Web dashboard" width="470"> | <img src="./img/page-weg-diag.png" alt="PV Router Web diagnostics" width="470"> |
 
 Local API:
 
