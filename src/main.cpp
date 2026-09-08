@@ -6,60 +6,60 @@
 #include "config/enums.h"
 #include "config/traduction.h"
 #include <NTPClient.h>
-#include <AsyncElegantOTA.h>
-
-
 
 // File System
 #include <FS.h>
 #include <Wire.h>  // Only needed for Arduino 1.6.5 and earlier
 #include <ArduinoJson.h> // ArduinoJson : https://github.com/bblanchon/ArduinoJson
 
+// SPIFFS helpers are intentionally included before the Wi-Fi tasks so the
+// reconnect path and the physical-button setup portal share the same stored
+// credential helpers.
+#include "functions/spiffsFunctions.h"
+#include "functions/wifiSetupPortal.h"
+
 #include "tasks/updateDisplay.h"
+#include "tasks/smoothDisplay.h"
+#include "tasks/versionedDisplay.h"
+#include "tasks/bootScreen.h"
 #include "tasks/switchDisplay.h"
 #include "tasks/fetch-time-from-ntp.h"
 //#include "tasks/mqtt-aws.h"
 #include "tasks/wifi-connection.h"
 //#include "tasks/wifi-update-signalstrength.h"
 #include "tasks/measure-electricity.h"
-#include "tasks/fronius.h"
 //#include "tasks/mqtt-home-assistant.h"
 #include "tasks/Dimmer.h"
 #include "tasks/gettemp.h"
 
 #include "functions/otaFunctions.h"
-#include "functions/spiffsFunctions.h"
 #include "functions/Mqtt_http_Functions.h"
 #include "functions/webFunctions.h"
+#include "functions/webOta.h"
 
-#if DIMMERLOCAL 
+#if DIMMERLOCAL
 #include "functions/dimmerFunction.h"
 #endif
-
-
 
 //***********************************
 //************* Afficheur Oled
 //***********************************
-#ifdef  DEVKIT1
+#ifdef DEVKIT1
 // Oled
-#include "SSD1306Wire.h" /// Oled ( https://github.com/ThingPulse/esp8266-oled-ssd1306 ) 
+#include "SSD1306Wire.h" /// Oled ( https://github.com/ThingPulse/esp8266-oled-ssd1306 )
 const int I2C_DISPLAY_ADDRESS = 0x3c;
-SSD1306Wire  display(0x3c, SDA, SCL); // pin 21 SDA - 22 SCL
+SSD1306Wire display(0x3c, SDA, SCL); // pin 21 SDA - 22 SCL
 #endif
 
-#ifdef  TTGO
+#ifdef TTGO
 #include <TFT_eSPI.h>
 #include <SPI.h>
 TFT_eSPI display = TFT_eSPI();   // Invoke library
 #endif
 
-
 DisplayValues gDisplayValues;
-//EnergyMonitor emon1;
-Config config; 
-Configwifi configwifi; 
-
+Config config;
+Configwifi configwifi;
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, NTP_SERVER, NTP_OFFSET_SECONDS, NTP_UPDATE_INTERVAL_MS);
@@ -68,306 +68,287 @@ NTPClient timeClient(ntpUDP, NTP_SERVER, NTP_OFFSET_SECONDS, NTP_UPDATE_INTERVAL
 unsigned short measurements[LOCAL_MEASUREMENTS];
 unsigned char measureIndex = 0;
 
-
-
 void setup()
 {
   #if DEBUG == true
     Serial.begin(115200);
-  #endif 
+  #endif
 
-  //démarrage file system
+  // démarrage file system
   Serial.println("start SPIFFS");
   SPIFFS.begin();
   loadwifi(wifi_conf, configwifi);
 
-
   // Setup the ADC
   adc1_config_channel_atten(ADC1_CHANNEL_0, ADC_ATTEN_DB_11);
-  //analogReadResolution(ADC_BITS);
   pinMode(ADC_INPUT, INPUT);
 
   #if OLED_ON == true
     Serial.println(OLEDSTART);
     // Initialising OLED
-    #ifdef  DEVKIT1
+    #ifdef DEVKIT1
       display.init();
       display.flipScreenVertically();
       display.clear();
     #endif
-    
+
     #ifdef TTGO
+      pinMode(SWITCH, INPUT);
+      display.init();
+      display.setRotation(1);
+      drawTTGOGraphicalBootScreen("DEMARRAGE", "Initialisation materiel", 15);
 
-        pinMode(SWITCH,INPUT);
+      // Physical setup entry point: the access point is never exposed merely
+      // because the home Wi-Fi is unavailable. It requires a deliberate
+      // three-second button hold during power-up/reboot.
+      if (wifiSetupRequestedAtBoot()) {
+        runWifiSetupPortal();
+      }
 
-        display.init();
-        //digitalWrite(TFT_BL, HIGH);
-        display.setRotation(1);
-        //display.begin();               // Initialise the display
-        display.fillScreen(TFT_BLACK); // Black screen fill
-        display.setCursor(0, 0, 2);
-        display.setTextColor(TFT_WHITE,TFT_BLACK);  
-        display.setTextSize(1);
-        display.println(BOOTING);
-          if  (strcmp(WIFI_PASSWORD,"xxx") == 0) { 
-            if  (strcmp(configwifi.SID,"xxx") == 0) {
-            display.println(WIFINO); 
-            }
-          else { 
-            display.println(WIFICONNECT + String(configwifi.SID));
-          }
-        } 
-        else display.println(WIFICONNECT WIFI_NETWORK);
+      drawTTGOGraphicalBootScreen("DEMARRAGE", "Configuration Wi-Fi normale", 25);
     #endif
-#endif
+  #endif
 
+  #if WIFI_ACTIVE == true
+    #ifdef TTGO
+      drawTTGOGraphicalBootScreen("CONNEXION WI-FI", "Connexion au reseau local", 35);
+    #endif
 
+    beginConfiguredWiFi();
+    const unsigned long firstWifiAttempt = millis();
 
-#if WIFI_ACTIVE == true
-  if ( strcmp(WIFI_PASSWORD,"xxx") == 0 ) { WiFi.begin(configwifi.SID, configwifi.passwd); }
-  else { WiFi.begin(WIFI_NETWORK, WIFI_PASSWORD); }
-  
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+    while (WiFi.status() != WL_CONNECTED &&
+           millis() - firstWifiAttempt < WIFI_TIMEOUT) {
+      delay(250);
+      Serial.print(".");
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+      serial_println("WiFi connected");
+      serial_println("IP address: ");
+      serial_println(WiFi.localIP());
+      gDisplayValues.currentState = UP;
+      gDisplayValues.IP = String(WiFi.localIP().toString());
+      btStop();
+
+      #ifdef TTGO
+        drawTTGOGraphicalBootScreen("WI-FI OK", gDisplayValues.IP, 60);
+      #endif
+    }
+    else {
+      serial_println("[WIFI] Initial connection failed; background retries enabled");
+      gDisplayValues.currentState = CONNECTING_WIFI;
+      gDisplayValues.IP = "OFFLINE";
+
+      #ifdef TTGO
+        drawTTGOGraphicalBootScreen("WI-FI INDISPONIBLE", "Boot + bouton 3 s = config", 60);
+        delay(1300);
+      #endif
+    }
+  #endif
+
+  #if DIMMERLOCAL
+    Dimmer_setup();
+  #endif
+
+  // vérification de la présence d'index.html
+  if (!SPIFFS.exists("/index.html")) {
+    Serial.println(SPIFFSNO);
   }
-  serial_println("WiFi connected");
-  serial_println("IP address: ");
-  serial_println(WiFi.localIP());
-  gDisplayValues.currentState = UP;
-  gDisplayValues.IP = String(WiFi.localIP().toString());
-  btStop();
-#endif
 
-#if DIMMERLOCAL 
-Dimmer_setup();
-#endif
-
-
-   // vérification de la présence d'index.html
-  if(!SPIFFS.exists("/index.html")){
-    Serial.println(SPIFFSNO);  
+  if (!SPIFFS.exists(filename_conf)) {
+    Serial.println(CONFNO);
   }
 
-  if(!SPIFFS.exists(filename_conf)){
-    Serial.println(CONFNO);  
-  }
+  //***********************************
+  //************* Setup - récupération du fichier de configuration
+  //***********************************
+  #ifdef TTGO
+    drawTTGOGraphicalBootScreen("CONFIGURATION", "Lecture config.json", 75);
+  #endif
 
-     //***********************************
-    //************* Setup -  récupération du fichier de configuration
-    //***********************************
-  
-  // Should load default config if run for the first time
   Serial.println(F("Loading configuration..."));
   loadConfiguration(filename_conf, config);
 
-  // Create configuration file
-  //Serial.println(F("Saving configuration..."));
-  //saveConfiguration(filename_conf, config);
+  #ifdef TTGO
+    drawTTGOGraphicalBootScreen("CONFIGURATION OK", "Demarrage des services", 82);
+  #endif
 
-
-
-
-
-
-  // Initialize emon library
-  //emon1.current(ADC_INPUT, 30);
-
-  // Initialize Dimmer State 
+  // Initialize Dimmer State
   gDisplayValues.dimmer = 0;
 
-#if WIFI_ACTIVE == true
-  #if WEBSSERVER == true
-  //***********************************
-	//************* Setup -  demarrage du webserver et affichage de l'oled
-	//***********************************
-   Serial.println("start Web server");
-   call_pages();
-  #endif
+  #if WIFI_ACTIVE == true
+    #if WEBSSERVER == true
+      //***********************************
+      //************* Setup - démarrage du webserver et affichage de l'oled
+      //***********************************
+      Serial.println("start Web server");
+      // Register the OTA/branding routes first. This intentionally takes
+      // precedence over the historical SPIFFS /favicon.ico handler.
+      setupWebOta();
+      call_pages();
+      #ifdef TTGO
+        drawTTGOGraphicalBootScreen("SERVEUR WEB OK", gDisplayValues.IP, 90);
+      #endif
+    #endif
 
-  // ----------------------------------------------------------------
-  // TASK: Connect to WiFi & keep the connection alive.
-  // ----------------------------------------------------------------
-  
-  xTaskCreate(
-    keepWiFiAlive,
-    "keepWiFiAlive",  // Task name
-    5000,            // Stack size (bytes)
-    NULL,             // Parameter
-    5,                // Task priority
-    NULL          // Task handle
-    
-  );
-  #endif
-
-  // ----------------------------------------------------------------
-  // TASK: Connect to AWS & keep the connection alive.
-  // ----------------------------------------------------------------
-  #if AWS_ENABLED == true
+    // TASK: Connect to WiFi & keep the connection alive.
     xTaskCreate(
-      keepAWSConnectionAlive,
-      "MQTT-AWS",      // Task name
-      5000,            // Stack size (bytes)
-      NULL,             // Parameter
-      5,                // Task priority
-      NULL              // Task handle
-    );
-  #endif
-
-  // ----------------------------------------------------------------
-  // TASK: Update the display every second
-  //       This is pinned to the same core as Arduino
-  //       because it would otherwise corrupt the OLED
-  // ----------------------------------------------------------------
-  #if OLED_ON == true 
-  xTaskCreatePinnedToCore(
-    updateDisplay,
-    "UpdateDisplay",  // Task name
-    10000,            // Stack size (bytes)
-    NULL,             // Parameter
-    4,                // Task priority
-    NULL,             // Task handle
-    ARDUINO_RUNNING_CORE
-  );
-  #endif
-
-
-#ifdef  TTGO
-  // ----------------------------------------------------------------
-  // Task: Update Dimmer power
-  // ----------------------------------------------------------------
-  xTaskCreate(
-    switchDisplay,
-    "Swith Oled",  // Task name
-    1000,                  // Stack size (bytes)
-    NULL,                   // Parameter
-    2,                      // Task priority
-    NULL                    // Task handle
-  );
- #endif
-
-
-
-  // ----------------------------------------------------------------
-  // Task: measure electricity consumption ;)
-  // ----------------------------------------------------------------
-  xTaskCreate(
-    //measureElectricity,
-    measureElectricityf,
-    "Measure electricity",  // Task name
-    10000,                  // Stack size (bytes)
-    NULL,                   // Parameter
-    25,                      // Task priority
-    NULL                    // Task handle
-  
-  );
-
-#if WIFI_ACTIVE == true
-  #if DIMMER == true
-  // ----------------------------------------------------------------
-  // Task: Update Dimmer power
-  // ----------------------------------------------------------------
-  xTaskCreate(
-    updateDimmer,
-    "Update Dimmer",  // Task name
-    5000,                  // Stack size (bytes)
-    NULL,                   // Parameter
-    4,                      // Task priority
-    NULL                    // Task handle
-  );
-  
-
-    xTaskCreate(
-    GetDImmerTemp,
-    "Update temp",  // Task name
-    5000,                  // Stack size (bytes)
-    NULL,                   // Parameter
-    4,                      // Task priority
-    NULL                    // Task handle
-  );
-  #endif
-
-#endif
-
-
-  // ----------------------------------------------------------------
-  // TASK: update time from NTP server.
-  // ----------------------------------------------------------------
-#if WIFI_ACTIVE == true
-  #if NTP_TIME_SYNC_ENABLED == true
-    xTaskCreate(
-      fetchTimeFromNTP,
-      "Update NTP time",
-      5000,            // Stack size (bytes)
-      NULL,             // Parameter
-      2,                // Task priority
-      NULL              // Task handle
-    );
-#endif
-
-
-  #if HA_ENABLED == true
-    xTaskCreate(
-      HADiscovery,
-      "MQTT-HA Discovery",  // Task name
-      5000,                // Stack size (bytes)
-      NULL,                 // Parameter
-      5,                    // Task priority
-      NULL                  // Task handle
-    );
-
-    xTaskCreate(
-      keepHAConnectionAlive,
-      "MQTT-HA Connect",
+      keepWiFiAlive,
+      "keepWiFiAlive",
       5000,
       NULL,
-      4,
+      5,
       NULL
     );
   #endif
-#endif
 
-#if WIFI_ACTIVE == true
-
-
-  #if WEBSSERVER == true
-    AsyncElegantOTA.begin(&server);
-    server.begin(); 
+  // TASK: Connect to AWS & keep the connection alive.
+  #if AWS_ENABLED == true
+    xTaskCreate(
+      keepAWSConnectionAlive,
+      "MQTT-AWS",
+      5000,
+      NULL,
+      5,
+      NULL
+    );
   #endif
 
-  #if MQTT_CLIENT == true
-    Mqtt_init();
-  #endif
-
-  if ( config.autonome == true ) {
-    gDisplayValues.dimmer = 0; 
-    dimmer_change( config.dimmer, config.IDXdimmer, gDisplayValues.dimmer ) ; 
-  }
-
-#endif
-
+  // TASK: Update the display every second.
   #if OLED_ON == true
-    #ifdef  DEVKIT1
-      display.clear();
+    xTaskCreatePinnedToCore(
+      updateDisplaySmoothV144,
+      "UpdateDisplay",
+      10000,
+      NULL,
+      4,
+      NULL,
+      ARDUINO_RUNNING_CORE
+    );
+  #endif
+
+  #ifdef TTGO
+    xTaskCreate(
+      switchDisplay,
+      "Switch Oled",
+      1000,
+      NULL,
+      2,
+      NULL
+    );
+  #endif
+
+  // TASK: measure Fronius / grid power.
+  xTaskCreate(
+    measureElectricityf,
+    "Measure electricity",
+    10000,
+    NULL,
+    25,
+    NULL
+  );
+
+  #if WIFI_ACTIVE == true
+    #if DIMMER == true
+      // TASK: regulate dimmer from fresh Fronius samples.
+      xTaskCreate(
+        updateDimmer,
+        "Update Dimmer",
+        5000,
+        NULL,
+        4,
+        NULL
+      );
+
+      // TASK: poll RobotDyn /state telemetry.
+      xTaskCreate(
+        GetDImmerTemp,
+        "Update temp",
+        5000,
+        NULL,
+        4,
+        NULL
+      );
     #endif
   #endif
 
+  // TASK: update time from NTP server.
+  #if WIFI_ACTIVE == true
+    #if NTP_TIME_SYNC_ENABLED == true
+      xTaskCreate(
+        fetchTimeFromNTP,
+        "Update NTP time",
+        5000,
+        NULL,
+        2,
+        NULL
+      );
+    #endif
+
+    #if HA_ENABLED == true
+      xTaskCreate(
+        HADiscovery,
+        "MQTT-HA Discovery",
+        5000,
+        NULL,
+        5,
+        NULL
+      );
+
+      xTaskCreate(
+        keepHAConnectionAlive,
+        "MQTT-HA Connect",
+        5000,
+        NULL,
+        4,
+        NULL
+      );
+    #endif
+  #endif
+
+  #if WIFI_ACTIVE == true
+    #if WEBSSERVER == true
+      server.begin();
+    #endif
+
+    #if MQTT_CLIENT == true
+      Mqtt_init();
+    #endif
+
+    if (config.autonome == true) {
+      gDisplayValues.dimmer = 0;
+      dimmer_change(config.dimmer, config.IDXdimmer, gDisplayValues.dimmer);
+    }
+  #endif
+
+  #ifdef TTGO
+    if (WiFi.status() == WL_CONNECTED)
+      drawTTGOGraphicalBootScreen("PRET", "Fronius - RobotDyn - MQTT", 100);
+    else
+      drawTTGOGraphicalBootScreen("WI-FI EN ATTENTE", "Bouton 3 s au boot = config", 100);
+
+    delay(550);
+    gDisplayBootComplete = true;
+    gDisplayForceRefresh = true;
+  #endif
+
+  #if OLED_ON == true
+    #ifdef DEVKIT1
+      display.clear();
+    #endif
+  #endif
 }
 
 void loop()
 {
-//serial_println(F("loop")); 
-
-#if WIFI_ACTIVE == true
-
+  #if WIFI_ACTIVE == true
     #if MQTT_CLIENT == true
-    if (!client.connected()) {
-    reconnect();
-    }
+      if (!client.connected()) {
+        reconnect();
+      }
     #endif
-#endif
-
-
+  #endif
 
   vTaskDelay(10000 / portTICK_PERIOD_MS);
 }

@@ -17,20 +17,39 @@ enum DEVICE_STATE {
 struct DisplayValues {
   double watt;
   double amps;
+  double grid;
   int8_t wifi_strength;
   DEVICE_STATE currentState;
   String IP;
   String time;
-  bool injection; 
+  bool injection;
   int dimmer;
-  int security; 
+  int security;
   int change;
   bool task;
-  bool porteuse; 
-  bool screenstate; 
+  bool porteuse;
+  bool screenstate;
   String temperature;
   double production;
   bool froniusup;
+  unsigned long froniusLastOkMs;
+
+  // State reported by the remote RobotDyn water-heater dimmer (/state JSON).
+  int dimmerReported;
+  int dimmerCommandReported;
+  bool dimmerCommOk;
+  unsigned long dimmerLastOkMs;
+  bool dimmerOn;
+  bool dimmerAlarm;
+  bool dimmerTempLimitActive;
+  float dimmerPower;
+  float dimmerPtotal;
+  int dimmerRssi;
+  int dimmerMaxTemp;
+  int dimmerTriggerPercent;
+  float dimmerReleaseTemp;
+  String dimmerAlert;
+  String dimmerVersion;
 };
 
 struct Config {
@@ -57,16 +76,23 @@ struct Config {
   int IDXdimmer;
   int tmax;
   int resistance;
-  bool polarity; 
+  bool polarity;
   char Publish[100];
-  int  ScreenTime;
+  int ScreenTime;
+
+  // V14.3 runtime settings exposed by the local Web UI. They are kept
+  // separate from the legacy fields above so an old config.json can still be
+  // loaded unchanged; missing keys receive safe V14.3 defaults.
+  int heaterPowerW;
+  int gridTargetW;
+  int gridDeadbandW;
+  int dimmerMaxPercent;
 };
 
 struct Configwifi {
   char SID[32];
   char passwd[64];
 };
-
 
 #if DEBUG == true
   #define serial_print(x)  Serial.print (x)

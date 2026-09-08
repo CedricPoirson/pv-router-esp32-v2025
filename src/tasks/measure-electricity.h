@@ -4,87 +4,173 @@
 #include <Arduino.h>
 #include "config/config.h"
 #include "config/enums.h"
-#include "mqtt-aws.h"
-#include "mqtt-home-assistant.h"
 #include "functions/energyFunctions.h"
 #include "functions/dimmerFunction.h"
 #include "functions/drawFunctions.h"
+#include "functions/Mqtt_http_Functions.h"
 
-// Fronius Inverter
-#include "HTTPClient.h"
-#include <ArduinoJson.h>  // Make sure this is included for JSON handling
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
+#include <math.h>
+
+#define FRONIUS_HTTP_TIMEOUT_MS            700UL
+#define FRONIUS_POLL_INTERVAL_MS          1500UL
+#define FRONIUS_OFFLINE_POLL_0_2MIN_MS    5000UL
+#define FRONIUS_OFFLINE_POLL_2_10MIN_MS  15000UL
+#define FRONIUS_OFFLINE_POLL_10MIN_MS    30000UL
+#define FRONIUS_OFFLINE_STAGE1_MS       120000UL
+#define FRONIUS_OFFLINE_STAGE2_MS       600000UL
 
 extern DisplayValues gDisplayValues;
-extern Config config; 
+extern Config config;
 
-int Pow_mqtt_send = 0;
+// Incremented only after a complete, validated PowerFlow sample has been
+// written to gDisplayValues. The dimmer task reacts once per fresh sample.
+volatile uint32_t gFroniusSampleCounter = 0;
 
 void measureElectricityf(void * parameter)
 {
-    for(;;){
-        long start = millis();
+    (void)parameter;
 
-        #if WIFI_ACTIVE == true
-            HTTPClient http;
-            String url = "http://" + String(IP_FRONIUS) + "/solar_api/v1/GetPowerFlowRealtimeData.fcgi";
-            String url2 = "http://" + String(IP_FRONIUS) + "/solar_api/v1/GetPowerFlowRealtimeData.fcgi";
-            
-            http.begin(url);
-            int httpCode = http.GET();
+    bool froniusStateKnown = false;
+    bool previousFroniusOk = false;
+    unsigned long froniusOfflineSinceMs = 0;
+    unsigned long previousPollIntervalMs = FRONIUS_POLL_INTERVAL_MS;
 
-            Serial.print("httpCode / function measure: ");
-            Serial.println(httpCode);
+    for (;;) {
+        const unsigned long cycleStartMs = millis();
 
-            #if(httpCode == HTTP_CODE_OK) 
-                String payload = http.getString();
-                DynamicJsonDocument doc(900);
-                DeserializationError error = deserializeJson(doc, payload);
+#if WIFI_ACTIVE == true
+        HTTPClient http;
+        String url = "http://" + String(IP_FRONIUS) +
+                     "/solar_api/v1/GetPowerFlowRealtimeData.fcgi";
 
-                long generatedPower = doc["Body"]["Data"]["Inverters"]["1"]["P"];
-                gDisplayValues.production  = generatedPower;
-            #else
-                gDisplayValues.froniusup = false;
-                Serial.println("gDisplayValues.froniusup = false");
-            #endif
-            http.end();
+        http.setConnectTimeout(FRONIUS_HTTP_TIMEOUT_MS);
+        http.setTimeout(FRONIUS_HTTP_TIMEOUT_MS);
 
-            HTTPClient http2;
-            http2.begin(url2);
-            httpCode = http2.GET();
-            #if(httpCode == HTTP_CODE_OK) 
-                String payload2 = http2.getString();
-                DynamicJsonDocument doc2(1500);
-                error = deserializeJson(doc2, payload2);
+        bool validFroniusSample = false;
+        String errorReason = "unknown";
 
-                long generatedPower2 = doc2["Body"]["Data"]["Site"]["P_Grid"];
-                gDisplayValues.watt  =  generatedPower2;
-                gDisplayValues.froniusup = true;
-            #else
-                gDisplayValues.froniusup = false;
-            #endif
-            http2.end();
-            Serial.print("generatedPower2 / function measure: ");
-            Serial.println(generatedPower2);
-            Serial.print("gDisplayValues.production / function measure: ");
-            Serial.println(gDisplayValues.production);
-            Serial.print("gDisplayValues.watt / function measure: ");
-            Serial.println(gDisplayValues.watt);
-            Serial.print("gDisplayValues.froniusup / function measure: ");
-            Serial.println(gDisplayValues.froniusup);
-        #endif
+        if (http.begin(url)) {
+            const int httpCode = http.GET();
 
-        long end = millis();
+            if (httpCode == HTTP_CODE_OK) {
+                const String payload = http.getString();
+                StaticJsonDocument<2048> doc;
+                const DeserializationError error = deserializeJson(doc, payload);
 
-        #if WIFI_ACTIVE == true
-            Pow_mqtt_send++;
-            if (Pow_mqtt_send > 10) {
-                Mqtt_send(String(config.IDX), String(int(gDisplayValues.watt)));  
-                Pow_mqtt_send = 0;
+                if (!error) {
+                    const int apiStatus = doc["Head"]["Status"]["Code"] | -1;
+                    JsonVariant gridValue = doc["Body"]["Data"]["Site"]["P_Grid"];
+
+                    if (apiStatus == 0 && !gridValue.isNull()) {
+                        const double grid = gridValue.as<double>();
+
+                        if (isfinite(grid) && fabs(grid) < 50000.0) {
+                            gDisplayValues.grid = grid;
+
+                            JsonVariant pvValue = doc["Body"]["Data"]["Site"]["P_PV"];
+                            if (!pvValue.isNull()) {
+                                const double pv = pvValue.as<double>();
+                                if (isfinite(pv))
+                                    gDisplayValues.production = pv;
+                            }
+                            else {
+                                JsonVariant inverterPower =
+                                    doc["Body"]["Data"]["Inverters"]["1"]["P"];
+                                if (!inverterPower.isNull()) {
+                                    const double pv = inverterPower.as<double>();
+                                    if (isfinite(pv))
+                                        gDisplayValues.production = pv;
+                                }
+                            }
+
+                            validFroniusSample = true;
+                        }
+                        else {
+                            errorReason = "invalid P_Grid";
+                        }
+                    }
+                    else {
+                        errorReason = "API Status.Code=" + String(apiStatus);
+                        if (gridValue.isNull())
+                            errorReason += " P_Grid=null";
+                    }
+                }
+                else {
+                    errorReason = "JSON ";
+                    errorReason += error.c_str();
+                }
             }
-        #endif
-        
-        vTaskDelay(2000 / portTICK_PERIOD_MS);  // Delay for 2 seconds to avoid overloading the system
-    }    
+            else {
+                errorReason = "HTTP " + String(httpCode);
+            }
+
+            http.end();
+        }
+        else {
+            errorReason = "HTTP begin failed";
+        }
+
+        gDisplayValues.froniusup = validFroniusSample;
+
+        if (validFroniusSample) {
+            gDisplayValues.froniusLastOkMs = millis();
+            gFroniusSampleCounter++;
+            froniusOfflineSinceMs = 0;
+
+            if (!froniusStateKnown || !previousFroniusOk) {
+                Serial.printf("[FRONIUS] ONLINE PV=%.0f W GRID=%.0f W\n",
+                              gDisplayValues.production,
+                              gDisplayValues.grid);
+            }
+        }
+        else {
+            if (froniusOfflineSinceMs == 0)
+                froniusOfflineSinceMs = millis();
+
+            if (!froniusStateKnown || previousFroniusOk) {
+                Serial.printf("[FRONIUS] OFFLINE (%s)\n", errorReason.c_str());
+            }
+        }
+
+        froniusStateKnown = true;
+        previousFroniusOk = validFroniusSample;
+
+#if MQTT_CLIENT == true
+        // Telemetry only. MQTT is not part of the regulation loop.
+        Mqtt_publishState();
+#endif
+#endif
+
+        // Adaptive polling drastically reduces Wi-Fi/CPU activity when the
+        // inverter has been offline for a long time (typically at night),
+        // while returning immediately to the normal 1.5 s cadence as soon as
+        // a valid Fronius response is received.
+        unsigned long pollIntervalMs = FRONIUS_POLL_INTERVAL_MS;
+        if (!gDisplayValues.froniusup && froniusOfflineSinceMs != 0) {
+            const unsigned long offlineMs = millis() - froniusOfflineSinceMs;
+            if (offlineMs >= FRONIUS_OFFLINE_STAGE2_MS)
+                pollIntervalMs = FRONIUS_OFFLINE_POLL_10MIN_MS;
+            else if (offlineMs >= FRONIUS_OFFLINE_STAGE1_MS)
+                pollIntervalMs = FRONIUS_OFFLINE_POLL_2_10MIN_MS;
+            else
+                pollIntervalMs = FRONIUS_OFFLINE_POLL_0_2MIN_MS;
+        }
+
+        if (pollIntervalMs != previousPollIntervalMs) {
+            Serial.printf("[FRONIUS] Poll interval -> %lu ms\n", pollIntervalMs);
+            previousPollIntervalMs = pollIntervalMs;
+        }
+
+        const unsigned long elapsedMs = millis() - cycleStartMs;
+        const unsigned long waitMs =
+            (elapsedMs < pollIntervalMs)
+                ? (pollIntervalMs - elapsedMs)
+                : 1UL;
+
+        vTaskDelay(waitMs / portTICK_PERIOD_MS);
+    }
 }
 
 #endif

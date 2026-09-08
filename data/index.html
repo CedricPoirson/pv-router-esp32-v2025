@@ -1,602 +1,181 @@
-
-<html lang="en">
-
+<!doctype html>
+<html lang="fr">
 <head>
-
   <meta charset="utf-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <meta name="description" content="">
-  <meta name="author" content="">
-
-  <title>Pv router - Dashboard</title>
-
-  <!-- Custom fonts for this template-->
- <link href="/all.min.css" rel="stylesheet" type="text/css"> 
-  <link href="https://fonts.googleapis.com/css?family=Nunito:200,200i,300,300i,400,400i,600,600i,700,700i,800,800i,900,900i" rel="stylesheet">
-
-  <!-- Custom styles for this template-->
-  <link href="/sb-admin-2.min.css" rel="stylesheet">
-
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b1220">
+  <title>PV Router</title>
+  <style>
+    :root{
+      --bg:#0b1220;--panel:#121c2d;--panel2:#18243a;--line:#263650;
+      --text:#f4f7fb;--muted:#93a4bd;--green:#45d483;--cyan:#48c7ef;
+      --orange:#ffb347;--red:#ff6470;--yellow:#f8df5a;--blue:#78a9ff;
+      --hero:#45d483;--hero-text:#07120c;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:radial-gradient(circle at top,#17243a 0,#0b1220 38rem);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+    a{color:inherit;text-decoration:none}button,input{font:inherit}
+    .wrap{max-width:1120px;margin:auto;padding:20px 18px 36px}
+    header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}.brand{display:flex;align-items:center;gap:12px}
+    .logo{width:44px;height:44px;border-radius:14px;background:linear-gradient(145deg,#42e686,#48c7ef);display:grid;place-items:center;color:#07130d;font-weight:900;font-size:22px;box-shadow:0 8px 24px #0007}
+    h1{font-size:22px;margin:0}.sub{color:var(--muted);font-size:13px;margin-top:3px}nav{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+    .btn{border:1px solid var(--line);background:#17243a;color:var(--text);padding:10px 13px;border-radius:11px;cursor:pointer;transition:.15s}.btn:hover{transform:translateY(-1px);border-color:#48658f}.btn.primary{background:#244b3a;border-color:#347354}
+    .hero{border-radius:22px;padding:24px 26px;background:var(--hero);color:var(--hero-text);box-shadow:0 18px 40px #0007;margin-bottom:16px;transition:.25s}.hero-top{display:flex;justify-content:space-between;align-items:center;gap:10px}.hero-label{font-size:15px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;opacity:.7}.hero-state{font-size:13px;font-weight:800;padding:6px 10px;border-radius:999px;background:#ffffff42;white-space:nowrap}.hero-value{font-size:clamp(48px,9vw,82px);font-weight:900;line-height:1;margin:10px 0 8px;letter-spacing:-.05em}.hero-note{font-size:14px;opacity:.72;font-weight:650}
+    .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:12px}.card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:16px;padding:16px;min-width:0;box-shadow:0 8px 20px #0003}.label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-weight:750;margin-bottom:8px}.value{font-size:27px;font-weight:850;letter-spacing:-.025em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.small{font-size:13px;color:var(--muted);margin-top:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .green{color:var(--green)}.cyan{color:var(--cyan)}.orange{color:var(--orange)}.red{color:var(--red)}.yellow{color:var(--yellow)}.blue{color:var(--blue)}
+    .section{display:grid;grid-template-columns:1.25fr .75fr;gap:12px;margin-top:12px}.section.history-layout{grid-template-columns:1.45fr .55fr}.title{font-size:15px;font-weight:800;margin-bottom:14px}.rows{display:grid;gap:10px}.row{display:flex;justify-content:space-between;align-items:center;gap:14px;border-bottom:1px solid #ffffff0b;padding-bottom:9px}.row:last-child{border-bottom:0;padding-bottom:0}.row span:first-child{color:var(--muted);font-size:13px}.row strong{font-size:14px;text-align:right}.chips{display:flex;gap:8px;flex-wrap:wrap}.chip{font-size:12px;font-weight:800;border:1px solid var(--line);padding:7px 9px;border-radius:999px;background:#0d1728}.chip.ok{border-color:#245e43;color:var(--green)}.chip.warn{border-color:#745b24;color:var(--yellow)}.chip.err{border-color:#81313b;color:var(--red)}
+    .gauge{margin-top:14px}.bar{height:16px;border-radius:999px;background:linear-gradient(90deg,var(--red) 0 18.75%,var(--orange) 18.75% 25%,var(--yellow) 25% 37.5%,var(--green) 37.5% 62.5%,var(--cyan) 62.5% 100%);position:relative;border:1px solid #ffffff45}.marker{position:absolute;width:4px;height:26px;background:white;top:-6px;left:25%;border-radius:2px;box-shadow:0 0 0 2px #0005;transition:left .25s}.scale{display:flex;justify-content:space-between;color:var(--muted);font-size:11px;margin-top:6px}
+    .chart-wrap{position:relative;width:100%;height:250px}.chart-wrap canvas{width:100%;height:250px;display:block}.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;color:var(--muted);font-size:12px}.legend span{display:flex;align-items:center;gap:6px}.dot{width:9px;height:9px;border-radius:50%;display:inline-block}.dot.pv{background:var(--green)}.dot.gridout{background:var(--cyan)}.dot.gridin{background:var(--red)}.dot.heater{background:var(--orange)}
+    .footer{display:flex;justify-content:space-between;gap:12px;color:var(--muted);font-size:12px;margin-top:18px;flex-wrap:wrap}.offline{opacity:.55}.pulse{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:6px;box-shadow:0 0 0 0 #45d48388;animation:pulse 2s infinite}@keyframes pulse{70%{box-shadow:0 0 0 8px #45d48300}100%{box-shadow:0 0 0 0 #45d48300}}
+    .toast{position:fixed;right:16px;bottom:16px;background:#17243a;border:1px solid var(--line);padding:11px 14px;border-radius:11px;box-shadow:0 10px 30px #0008;font-size:13px;opacity:0;transform:translateY(8px);pointer-events:none;transition:.2s}.toast.show{opacity:1;transform:none}
+    @media(max-width:820px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.section,.section.history-layout{grid-template-columns:1fr}.hero{padding:20px}.wrap{padding:16px 12px 28px}}
+    @media(max-width:500px){header{align-items:flex-start;flex-direction:column}.value{font-size:24px}.hero-value{font-size:54px}.grid{gap:9px}.card{padding:13px}.hero-state{font-size:11px}}
+  </style>
 </head>
-
-<body id="page-top">
-
-  <!-- Page Wrapper -->
-  <div id="wrapper">
-
-    <!-- Sidebar -->
-    <ul class="navbar-nav bg-gradient-primary sidebar sidebar-dark accordion" id="accordionSidebar">
-
-      <!-- Sidebar - Brand -->
-      <a class="sidebar-brand d-flex align-items-center justify-content-center" href="/">
-        <div class="sidebar-brand-icon rotate-n-15">
-          <i class="fas fa-laugh-wink"></i>
-        </div>
-        <div class="sidebar-brand-text mx-3">Pv router</div>
-      </a>
-
-      <!-- Divider -->
-      <hr class="sidebar-divider my-0">
-
-      <!-- Nav Item - Dashboard -->
-      <li class="nav-item active">
-        <a class="nav-link" href="/">
-          <i class="fas fa-fw fa-tachometer-alt"></i>
-          <span>Dashboard</span><br>
-<!--		<span id="version">%Domoticz%</span> -->
-</a> 
-		  
-      </li>
-
-
-
-      <!-- Divider -->
-      <hr class="sidebar-divider">
-
-      <!-- Heading -->
-      <div class="sidebar-heading">
-        Interface
-      </div>
-
-      <!-- Nav Item - Pages Collapse Menu -->
-	  <li class="nav-item active">
-        <a class="nav-link" href="config.html">
-          <i class="fas fa-fw fa-cog"></i>
-          <span>Configuration</span></a>
-      </li>
-
-    <!-- Divider -->
-      <hr class="sidebar-divider">
-	  
-      <div class="sidebar-heading">
-        tuning
-      </div>	  
-	  
-      <!-- Nav Item - Utilities Collapse Menu -->
-      <li class="nav-item">
-        <a class="nav-link collapsed" href="#" data-toggle="collapse" data-target="#collapseUtilities" aria-expanded="true" aria-controls="collapseUtilities">
-          <i class="fas fa-fw fa-wrench"></i>
-          <span>Debug</span>
-        </a>
-        <div id="collapseUtilities" class="collapse" aria-labelledby="headingUtilities" data-parent="#accordionSidebar">
-          <div class="bg-white py-2 collapse-inner rounded">
-            <h6 class="collapse-header">Debug options</h6>
-            <a class="collapse-item" href="">free memory : <span id="memory">init</span></a>
-            <a class="collapse-item" href="">Trigger start : <span id="trigger">init</span></a>
-            <a class="collapse-item" href="">Middle point: <span id="middle">init</span></a>
-            <a class="collapse-item" href="">resistance: <span id="loop">init</span></a>
-			<a class="collapse-item" href="#collapserawdata" data-toggle="collapse" aria-controls="collapserawdata">Raw Data</a>
-          </div>
-        </div>
-      </li>
-
-  
-
-
-      <!-- Divider -->
-      <hr class="sidebar-divider d-none d-md-block">
-
-      <!-- Sidebar Toggler (Sidebar) -->
-      <div class="text-center d-none d-md-inline">
-        <button class="rounded-circle border-0" id="sidebarToggle"></button>
-      </div>
-
-    </ul>
-    <!-- End of Sidebar -->
-
-    <!-- Content Wrapper -->
-    <div id="content-wrapper" class="d-flex flex-column">
-
-      <!-- Main Content -->
-      <div id="content">
-
-        <!-- Topbar -->
-        <nav class="navbar navbar-expand navbar-light bg-white topbar mb-4 static-top shadow">
-
-          <!-- Sidebar Toggle (Topbar) -->
-   <!--       <button id="sidebarToggleTop" class="btn btn-link d-md-none rounded-circle mr-3">
-            <i class="fa fa-bars"></i>
-          </button>
-
-
-
-          <!-- Topbar Navbar -->
-          <ul class="navbar-nav ml-auto">
-
-            <!-- Nav Item - Search Dropdown (Visible Only XS) -->
-            <li class="nav-item dropdown no-arrow d-sm-none">
-              <a class="nav-link dropdown-toggle" href="#" id="searchDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                <i class="fas fa-search fa-fw"></i>
-              </a>
-              <!-- Dropdown - Messages -->
-              <div class="dropdown-menu dropdown-menu-right p-3 shadow animated--grow-in" aria-labelledby="searchDropdown">
-
-              </div>
-            </li>
-
-            <!-- Nav Item - Alerts -->
-            <li class="nav-item dropdown no-arrow mx-1">
-              <a class="nav-link dropdown-toggle" href="#" id="alertsDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                Transmission mode <i class="fas fa-bell fa-fw"></i>
-                <!-- Counter - Alerts -->
-                <span class="badge badge-danger badge-counter"><span id="sendmode2">%SENDMODE%</span></span>
-              </a>
-              
-            </li>
-
-            
-
-            <div class="topbar-divider d-none d-sm-block"></div>
-
-        
-
-          </ul>
-
-        </nav>
-        <!-- End of Topbar -->
-
-        <!-- Begin Page Content -->
-        <div class="container-fluid">
-
-          <!-- Page Heading -->
-          <div class="d-sm-flex align-items-center justify-content-between mb-4">
-            <h1 class="h3 mb-0 text-gray-800">Dashboard</h1>
-           
-          </div>
-
-          <!-- Content Row -->
-          <div class="row">
-
-<!-- Earnings (Monthly) Card Example -->
-            <div class="col-xl-3 col-md-6 mb-4">
-              <div class="card border-left-primary shadow h-100 py-2">
-                <div class="card-body">
-                  <div class="row no-gutters align-items-center">
-                    <div class="col mr-2">
-                      <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">State</div>
-                      <div class="h5 mb-0 font-weight-bold text-gray-800"><span id="state">%STATE%</span></div>
-                    </div>
-                    <div class="col-auto">
-                      <i class="fas fa-calendar fa-2x text-gray-300"></i>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Earnings (Monthly) Card Example -->
-            <div class="col-xl-3 col-md-6 mb-4">
-              <div class="card border-left-info shadow h-100 py-2">
-                <div class="card-body">
-                  <div class="row no-gutters align-items-center">
-                    <div class="col mr-2">
-                      <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Sigma</div>
-                      <div class="h5 mb-0 font-weight-bold text-gray-800"><span id="sigma">%SIGMA%</span></div>
-                    </div>
-                    <div class="col-auto">
-                      <i class="fas fa-dollar-sign fa-2x text-gray-300"></i>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-			
-            <div class="col-xl-3 col-md-6 mb-4">
-              <div class="card border-left-info shadow h-100 py-2">
-                <div class="card-body">
-                  <div class="row no-gutters align-items-center">
-                    <div class="col mr-2">
-                      <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Switch Screen</div>
-                      <button type="button" class="btn btn-primary btn-user btn-block" id="screen" onclick="sendservermode('screen');" >ON/OFF Oled </button>
-                    </div>
-                    <div class="col-auto">
-                      <i class="fas fa-display fa-2x text-gray-300"></i>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div> 
-
-
-          </div>
-
-          <!-- Content Row -->
-
-          <div class="row">
-
-            <!-- Area Chart -->
-            <div class="col-xl-3 col-md-6 mb-4">
-              <div class="card shadow mb-4">
-                <!-- Card Header - Dropdown -->
-				<div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                  <h6 class="m-0 font-weight-bold text-primary">Sigma</h6>
-				  </div>
-					<div class="card-body">
-					<div id='curve_chart2' style=' width: auto; height: 200px;'>
-										
-					</div>
-					</div>
-			</div>
-		</div>
-		
-		     <div class="col-xl-3 col-md-6 mb-4">
-              <div class="card shadow mb-4">
-                <!-- Card Header - Dropdown -->
-				<div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                  <h6 class="m-0 font-weight-bold text-primary">Routed Power</h6>
-				  </div>
-					<div class="card-body">
-					<div id='curve_power' style=' width: auto; height: 200px;'>
-										
-					</div>
-					</div>
-			</div>
-		</div>
-			
-		<div class="col-xl-12 col-lg-7">
-            <div class="card shadow mb-4">
-			<a href="#collapseOscillo" class="d-block card-header py-3 collapsed"" data-toggle="collapse" role="button" aria-expanded="false" aria-controls="collapseOscillo">
-                  <h6 class="m-0 font-weight-bold text-primary">Oscillo</h6>
-                </a>
-                
-         
-
-
-				
-				
-                <!-- Card Body -->
-				<div class="collapse " id="collapseOscillo">
-                <div class="card-body">
-				<script type='text/javascript' src='https://www.gstatic.com/charts/loader.js'></script> 
-				
-				  <script type='text/javascript'> 
-				  
-				 
-				  
-				  google.charts.load('current', {'packages':['corechart','gauge','line']}); 
-				  google.charts.setOnLoadCallback(drawChart);
-				  
-				  var chart ;
-				  var options = { title: 'Oscilloscope Mode', curveType: 'function', legend: { position: 'bottom' } };
-				  var data ;
-				  var inc;
-				  
-				  function drawChart() {    
-
-					var optionsGauge = {           
-          redFrom: -100, 
-          redTo: -25,
-           
-          yellowFrom: 50, 
-          yellowTo: 400, 
-           
-          greenFrom: -50, 
-          greenTo: 50, 
-		  	  
-          minorTicks: 4,
-		  
-          min: -100, 
-          max: 400, 
-           
-          
-        };
-       
-	   
-	   var optionsGaugepower = {           
-          redFrom: 37.5, 
-          redTo: 50,
-           
-          yellowFrom: 25, 
-          yellowTo: 37.5, 
-           
-          greenFrom: 0, 
-          greenTo: 25, 
-		  	  
-          minorTicks: 5,
-		  
-          min: 0, 
-          max: 50, 
-           
-          
-        };
-				  
-				 			  
-				
-				  setInterval(function ( ) {
-				  
-					chart = new google.visualization.LineChart(document.getElementById('curve_chart'));  	 
-					data2 = new google.visualization.DataTable(); 
-					data2.addColumn('number', 'time');
-					data2.addColumn('number', 'half wave');
-					data2.addColumn('number', 'Analog out (Ampere)');
-				
-				 	var jsondata = $.ajax ({
-						url : '/chart.json',
-						type : 'GET',
-						dataType: "json",
-						async: false
-						 }).responseText; 
-					
-					data2.addRows( JSON.parse(jsondata)  );
-					chart.draw(data2, options);
-					document.getElementById("rawdata").innerHTML = jsondata;
-					
-					}, 8000 ) ;
-
-	
-		<!-- mise à jour de la jauge  --> 	
-		var gaugePA = new google.visualization.Gauge(document.getElementById('curve_chart2'));
-	    dataGaugePA = new google.visualization.DataTable();
-	    dataGaugePA.addColumn('string', 'Sigma');
-		dataGaugePA.addColumn('number', 'Value');
-		dataGaugePA.addRows(1);
-		
-		
-		<!-- mise à jour de la jauge  --> 	
-		var gaugePApower = new google.visualization.Gauge(document.getElementById('curve_power'));
-	    dataGaugePApower = new google.visualization.DataTable();
-	    dataGaugePApower.addColumn('string', 'Power');
-		dataGaugePApower.addColumn('number', 'Value');
-		dataGaugePApower.addRows(1);
-
-
-
-	<!-- <!-- récupération valeur sigma et State --> 	 -->
-	  setInterval(function ( ) {
-
-
-
-	var xhttpstate = $.get ({
-		url : '/state',
-		type : 'GET',
-		dataType: "text",
-		success: function ( result ) { 
-		var config = result.split(";");
-		
-		dataGaugePA.setValue(0, 0, config[0]); 
-		dataGaugePA.setValue(0, 1, config[1]);
-		
-		dataGaugePApower.setValue(0, 0, "Power"); 
-		dataGaugePApower.setValue(0, 1, config[2]);
-		
-		gaugePA.draw(dataGaugePA,optionsGauge);
-		gaugePApower.draw(dataGaugePApower,optionsGaugepower);
-		
-		document.getElementById("state").innerHTML = config[0];
-		document.getElementById("sigma").innerHTML = config[1];
-		
-	
-		},
-		async: true });
-		
-	    <!-- datahistoPA.addRows([  [ inc , inc ] ]); -->
-		<!-- histoPA.draw(datahistoPA,options); -->
-		<!-- inc++; -->
-		
-	<!-- var xhttpstate = $.get ({ -->
-		<!-- url : '/state', -->
-		<!-- type : 'GET', -->
-		<!-- dataType: "text", -->
-		<!-- async: false }).responseText;	 -->
-		
-		<!-- var config = xhttpstate.split(";"); -->
-		
-		<!-- dataGaugePA.setValue(0, 0, config[0]);  -->
-		<!-- dataGaugePA.setValue(0, 1, config[1]); -->
-		<!-- gaugePA.draw(dataGaugePA,optionsGauge); -->
-		<!-- document.getElementById("state").innerHTML = config[0]; -->
-		<!-- document.getElementById("sigma").innerHTML = config[1]; -->
-				
-      <!-- valeur dispo String(domotic_server) + ";" +  port + ";"  + IDX + ";"  +  VERSION +";" + middle +";"+ delta +";"+cycle ; --> 
-  }, 2000 ) ;	
-				  
-	
-
-<!-- récupération valeur sendmode --> 	
-  setInterval(function refreshsend( ) {
-    var xhttp = new XMLHttpRequest();
-    xhttp.onreadystatechange = function() {
-      if (this.readyState == 4 && this.status == 200) {
-        document.getElementById("sendmode").innerHTML = this.responseText;
-		document.getElementById("sendmode2").innerHTML = this.responseText;
-		
-      }
-    };
-    xhttp.open("GET", "/sendmode", true);
-    xhttp.send();
-	
-  }, 10000 ) ;
-  			
-			var recupconfig = $.get ({
-		url : '/config',
-		type : 'GET',
-		dataType: "text",
-		async: false }).responseText; 
-				  
-        var config = recupconfig.split(";");
-
-		//document.getElementById("domoticz").innerHTML = config[0];
-		//document.getElementById("port").innerHTML = config[1];	  
-		//document.getElementById("idx").innerHTML = config[2];
-		document.getElementById("version").innerHTML = config[3];
-    document.getElementById("screentime").value = config[21];	
-	
-				  
-<!-- récupération onclick sur send mode -->
-
-
-
-  
-}
-
-
-setInterval(function refreshsend( ) {
-var xhttpstate = $.get ({
-		url : '/debug',
-		type : 'GET',
-		dataType: "text",
-		success: function ( result ) { 
-		var config = result.split(";");
-		
-		document.getElementById("memory").innerHTML = config[0];
-		document.getElementById("trigger").innerHTML = config[1];
-		document.getElementById("middle").innerHTML = config[2];
-		document.getElementById("loop").innerHTML = config[4];
-		
-	
-		},
-		async: true });
-  }, 20000 ) ;
-
-
-	
-function sendmode (mode) {
-
-		$.get( "/get", { send: 	mode } )
-		.done(function(data) {
-		document.getElementById("sendmode").innerHTML = "Request sent";
-		document.getElementById("sendmode2").innerHTML = "Request sent";
-		});
-
-
-}
-
-				  
-function sendservermode (mode) {
-
-$.get( "/get", { servermode: mode } )
-.done(function(data) { 
-
-var config = data.split(";");
-document.getElementById("screen").value = config[21];
-}); 
-
-}
-
-
-		
-		</script >
-		
-  
-                     <div id='curve_chart' style=' width: auto; height: 500px;'>
-                  </div>
-		   </div>
-        </div>	
-	   </div>		
-	</div>	
-			
-			<div class="col-xl-12 col-lg-7">
-              			<!-- Collapsable Card Example -->
-			<div class="card shadow mb-4">
-                <!-- Card Header - Accordion -->
-                <a href="#collapserawdata" class="d-block card-header py-3 collapsed"" data-toggle="collapse" role="button" aria-expanded="false" aria-controls="collapserawdata">
-                  <h6 class="m-0 font-weight-bold text-primary">Row Data</h6>
-                </a>
-                <!-- Card Content - Collapse -->
-                <div class="collapse " id="collapserawdata">
-                  <div class="card-body">
-                    <div id='rawdata' style=' width: auto; height: 500px;'>
-					
-                  </div>
-				  test
-					<form action="javascript:alert( 'success!' );">
-  <div>
-    <input type="text">
-    <input type="submit">
-  </div>
-</form>
-<script src="https://code.jquery.com/jquery-3.4.1.js"></script>
-<script>
-$( "form" ).submit(function( event ) {
-  if ( $( "input" ).first().val() === "correct" ) {
-    $( "span" ).text( "Validated..." ).show();
-    return;
-  }
- 
-  $( "span" ).text( "Not valid!" ).show().fadeOut( 1000 );
-  event.preventDefault();
-});
-</script>
-<span></span>
-                  </div>
-                </div>
-            </div>
-				                        
-		   </div>
-            
-				  
-				  </div>
-				  
-                  
-
-				   
-				  
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <!-- /.container-fluid -->
-      </div>
-      <!-- End of Main Content -->
-
-      <!-- Footer -->
-      <footer class="sticky-footer bg-white">
-        <div class="container my-auto">
-          <div class="copyright text-center my-auto">
-            <span>https://github.com/xlyric/  - 2019</span>
-          </div>
-        </div>
-      </footer>
-      <!-- End of Footer -->
-
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><div class="logo">PV</div><div><h1>PV Router</h1><div class="sub"><span class="pulse" id="liveDot"></span><span id="deviceLine">Connexion…</span></div></div></div>
+    <nav><button class="btn" onclick="toggleScreen()">Écran ON/OFF</button><a class="btn" href="#aide-ecran">Aide écran</a><button class="btn" id="copyBtn" onclick="copyDiagnostic()">Copier diagnostic</button><a class="btn" href="/update">OTA</a><a class="btn primary" href="/config.html">Configuration</a></nav>
+  </header>
+
+  <section class="hero" id="hero"><div class="hero-top"><div class="hero-label" id="heroLabel">DISPO</div><div class="hero-state" id="heroState">—</div></div><div class="hero-value" id="heroValue">—</div><div class="hero-note" id="heroNote">Chargement des données temps réel…</div></section>
+
+  <section class="grid">
+    <div class="card"><div class="label">Production PV</div><div class="value green" id="pv">—</div><div class="small" id="froniusAge">Fronius —</div></div>
+    <div class="card"><div class="label">Réseau</div><div class="value cyan" id="grid">—</div><div class="small" id="gridMode">—</div></div>
+    <div class="card"><div class="label">Maison</div><div class="value" id="house">—</div><div class="small">Consommation instantanée</div></div>
+    <div class="card"><div class="label">Chauffe-eau</div><div class="value orange" id="heater">—</div><div class="small" id="dimmerLine">Dimmer —</div></div>
+  </section>
+
+  <section class="grid">
+    <div class="card"><div class="label">Température ECS</div><div class="value" id="ecsTemp">—</div><div class="small" id="ecsMax">Tmax —</div><div class="small" id="ecsTrigger">Reprise —</div></div>
+    <div class="card"><div class="label">Commande dimmer</div><div class="value" id="cmd">—</div><div class="small" id="actual">Réel —</div></div>
+    <div class="card"><div class="label">Wi-Fi ESP32</div><div class="value blue" id="wifi">—</div><div class="small" id="ip">IP —</div></div>
+    <div class="card"><div class="label">Wi-Fi RobotDyn</div><div class="value blue" id="dimmerRssi">—</div><div class="small" id="dimmerVersion">Version —</div></div>
+  </section>
+
+  <section class="section history-layout">
+    <div class="card">
+      <div class="title">Historique local · 30 min max</div>
+      <div class="small" id="historyInfo" style="margin-top:-8px;margin-bottom:8px">Les données restent uniquement dans ce navigateur.</div>
+      <div class="chart-wrap"><canvas id="historyChart"></canvas></div>
+      <div class="legend"><span><i class="dot pv"></i>PV</span><span><i class="dot gridout"></i>Réseau export</span><span><i class="dot gridin"></i>Réseau import</span><span><i class="dot heater"></i>Chauffe-eau</span></div>
     </div>
-    <!-- End of Content Wrapper -->
+    <div class="card">
+      <div class="title">Régulation V14.3</div>
+      <div class="rows">
+        <div class="row"><span>Cible réseau</span><strong id="target">—</strong></div>
+        <div class="row"><span>Bande acceptée</span><strong id="band">—</strong></div>
+        <div class="row"><span>Réseau mesuré</span><strong id="gridMeasured">—</strong></div>
+        <div class="row"><span>Correction théorique</span><strong id="correction">—</strong></div>
+        <div class="row"><span>Commande / réel</span><strong id="regCmdActual">—</strong></div>
+        <div class="row"><span>Modèle chauffe-eau</span><strong id="heaterModel">—</strong></div>
+      </div>
+    </div>
+  </section>
 
-  </div>
-  <!-- End of Page Wrapper -->
+  <section class="section">
+    <div class="card">
+      <div class="title">Puissance disponible / import réseau</div>
+      <div class="gauge"><div class="bar"><div class="marker" id="marker"></div></div><div class="scale"><span>-2 kW</span><span>0</span><span>2 kW</span><span>4 kW</span><span>6 kW</span></div></div>
+      <div class="rows" style="margin-top:16px"><div class="row"><span>Puissance routable calculée</span><strong id="available">—</strong></div><div class="row"><span>Puissance résistance estimée</span><strong id="heater2">—</strong></div><div class="row"><span>État de régulation</span><strong id="routing">—</strong></div></div>
+    </div>
+    <div class="card">
+      <div class="title">État système</div><div class="chips" id="chips"><span class="chip">Chargement…</span></div>
+      <div class="rows" style="margin-top:16px"><div class="row"><span>Dernière trame Fronius</span><strong id="froniusAge2">—</strong></div><div class="row"><span>Dernière trame dimmer</span><strong id="dimmerAge">—</strong></div><div class="row"><span>MQTT</span><strong id="mqtt">—</strong></div><div class="row"><span>Mémoire libre</span><strong id="heap">—</strong></div><div class="row"><span>Alerte RobotDyn</span><strong id="alert">RAS</strong></div><div class="row"><span>Uptime</span><strong id="uptime">—</strong></div></div>
+    </div>
+  </section>
 
+  <section class="card" id="aide-ecran" style="margin-top:12px">
+    <div class="title">Comprendre l’écran TTGO</div>
+    <div class="section" style="margin-top:0">
+      <div class="rows">
+        <div class="row"><span>En-tête</span><strong>Heure · eau/Tmax · état CE</strong></div>
+        <div class="row"><span>Bandeau central</span><strong>IMPORT / ZERO GRID / DISPO / SURPLUS</strong></div>
+        <div class="row"><span>PV + EXP/IMP</span><strong>Production Fronius et échange réseau</strong></div>
+        <div class="row"><span>CE % / W</span><strong>Sortie réelle du chauffe-eau</strong></div>
+      </div>
+      <div class="rows">
+        <div class="row"><span>REPRISE xx°C</span><strong>Seuil de redémarrage après TEMP MAX</strong></div>
+        <div class="row"><span>Jauge basse</span><strong>Import à gauche · puissance disponible à droite</strong></div>
+        <div class="row"><span>Appui court</span><strong>Principal → Diagnostic 2/3 → Aide 3/3</strong></div>
+        <div class="row"><span>Appui long</span><strong>Extinction manuelle de l’écran</strong></div>
+      </div>
+    </div>
+    <div class="small" style="white-space:normal;overflow:visible">DISPO indique la puissance PV encore routable en tenant compte de la puissance déjà absorbée par le chauffe-eau. SURPLUS est utilisé lorsque de l’énergie reste exportée alors que le chauffe-eau est thermiquement bloqué ou ne peut plus absorber davantage.</div>
+  </section>
 
+  <div class="footer"><span id="version">Firmware —</span><span>Mise à jour automatique toutes les 2 s · historique non écrit en flash</span></div>
+</div>
+<div class="toast" id="toast">Diagnostic copié</div>
+<script>
+  const $=id=>document.getElementById(id);
+  const fmtW=w=>{w=Number(w||0);const a=Math.abs(w);return a>=1000?(a/1000).toFixed(2)+' kW':Math.round(a)+' W'};
+  const fmtAxisW=w=>{w=Number(w||0);if(w===0)return '0 W';const sign=w>0?'+':'-',a=Math.abs(w);if(a>=1000){const digits=a%1000===0?0:1;return sign+(a/1000).toFixed(digits)+' kW'}return sign+Math.round(a)+' W'};
+  const signedW=w=>{w=Number(w||0);return (w>0?'+':'')+Math.round(w)+' W'};
+  const age=ms=>ms==null?'jamais':ms<1000?'< 1 s':(ms/1000).toFixed(ms<10000?1:0)+' s';
+  const uptime=s=>{s=Number(s||0);const d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60);return d?`${d}j ${h}h`:`${h}h ${m}m`};
+  const tempColor=t=>t==null?'var(--muted)':t>=50?'var(--green)':t>=30?'var(--orange)':'var(--cyan)';
+  function chip(text,kind=''){return `<span class="chip ${kind}">${text}</span>`}
+  function markerFor(v){v=Math.max(-2000,Math.min(6000,v));return ((v+2000)/8000*100).toFixed(2)+'%'}
 
+  let lastStatus=null;
+  const history=[];
+  const HISTORY_MS=30*60*1000;
 
+  function addHistory(d){
+    const now=Date.now();
+    history.push({t:now,pv:Number(d.pv_w||0),grid:Number(d.grid_w||0),heater:Number(d.dimmer?.heater_w||0)});
+    while(history.length&&history[0].t<now-HISTORY_MS)history.shift();
+    const mins=history.length>1?Math.min(30,(now-history[0].t)/60000):0;
+    $('historyInfo').textContent=`Historique navigateur : ${mins.toFixed(mins<10?1:0)} min · ${history.length} points · aucune écriture flash`;
+    drawHistory();
+  }
 
-  <!-- Bootstrap core JavaScript-->
-  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
-  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.bundle.min.js"></script>
+  function drawHistory(){
+    const canvas=$('historyChart');if(!canvas)return;
+    const rect=canvas.getBoundingClientRect(),w=Math.max(260,rect.width),h=250,dpr=window.devicePixelRatio||1;
+    canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
+    const ctx=canvas.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
+    const L=48,R=10,T=10,B=25,pw=w-L-R,ph=h-T-B;
+    ctx.font='11px -apple-system,BlinkMacSystemFont,Segoe UI,Arial';ctx.fillStyle='#93a4bd';ctx.lineWidth=1;
+    if(history.length<2){ctx.fillText('Historique en cours de constitution…',L,T+20);return;}
+    const now=Date.now(),start=Math.max(now-HISTORY_MS,history[0].t);
+    let minY=Math.min(-500,...history.map(p=>p.grid));
+    let maxY=Math.max(1000,...history.map(p=>Math.max(p.pv,p.heater,p.grid)));
+    minY=Math.floor(minY/500)*500;maxY=Math.ceil(maxY/500)*500;if(maxY-minY<1000)maxY=minY+1000;
+    const x=t=>L+((t-start)/Math.max(1,now-start))*pw;
+    const y=v=>T+(maxY-v)/(maxY-minY)*ph;
+    [minY,maxY].forEach(v=>{const yy=y(v);ctx.beginPath();ctx.moveTo(L,yy);ctx.lineTo(w-R,yy);ctx.strokeStyle='#ffffff12';ctx.lineWidth=1;ctx.stroke();ctx.fillStyle='#93a4bd';ctx.fillText(fmtAxisW(v),4,yy+4)});
+    const zeroY=y(0);ctx.beginPath();ctx.moveTo(L,zeroY);ctx.lineTo(w-R,zeroY);ctx.strokeStyle='#ffffff55';ctx.lineWidth=1.5;ctx.stroke();ctx.fillStyle='#c4cedd';ctx.fillText('0 W',4,zeroY+4);
+    ctx.fillStyle='#93a4bd';ctx.fillText('début',L,h-6);ctx.fillText('maintenant',w-R-58,h-6);
+    function series(key,color){ctx.beginPath();let started=false;for(const p of history){if(p.t<start)continue;const xx=x(p.t),yy=y(p[key]);if(!started){ctx.moveTo(xx,yy);started=true}else ctx.lineTo(xx,yy)}ctx.strokeStyle=color;ctx.lineWidth=2;ctx.stroke()}
+    series('pv','#45d483');series('heater','#ffb347');
+    ctx.lineWidth=2;for(let i=1;i<history.length;i++){const a=history[i-1],b=history[i];if(b.t<start)continue;ctx.beginPath();ctx.moveTo(x(Math.max(a.t,start)),y(a.grid));ctx.lineTo(x(b.t),y(b.grid));ctx.strokeStyle=((a.grid+b.grid)/2)>0?'#ff6470':'#48c7ef';ctx.stroke()}
+  }
 
-  <!-- Core plugin JavaScript-->
-  <script src="http://pvrouter.poissonnier.net/vendor/jquery-easing/jquery.easing.min.js"></script>
+  function render(d){
+    lastStatus=d;document.body.classList.remove('offline');$('deviceLine').textContent=`${d.ip||'ESP32'} · ${d.status||'—'}`;$('version').textContent=`Firmware ${d.version||'—'}`;$('uptime').textContent=uptime(d.uptime_s);$('ip').textContent=`IP ${d.ip||'—'}`;$('wifi').textContent=`${d.wifi_rssi} dBm`;
+    $('pv').textContent=fmtW(d.pv_w);$('house').textContent=fmtW(d.house_w);$('available').textContent=fmtW(d.available_w);$('heater').textContent=fmtW(d.dimmer.heater_w);$('heater2').textContent=fmtW(d.dimmer.heater_w);$('cmd').textContent=`${d.dimmer.cmd}%`;$('actual').textContent=`Réel ${d.dimmer.actual}%`;$('dimmerLine').textContent=`Réel ${d.dimmer.actual}% · Cmd ${d.dimmer.cmd}%`;$('dimmerRssi').textContent=`${d.dimmer.rssi} dBm`;$('dimmerVersion').textContent=d.dimmer.version||'Version inconnue';$('dimmerAge').textContent=age(d.dimmer.age_ms);$('froniusAge').textContent=`Fronius ${d.fronius?'OK':'OFF'} · ${age(d.fronius_age_ms)}`;$('froniusAge2').textContent=age(d.fronius_age_ms);$('alert').textContent=d.dimmer.alert&&d.dimmer.alert!=='RAS'?d.dimmer.alert:'RAS';$('routing').textContent=d.status||'—';$('mqtt').textContent=d.mqtt_connected?'Connecté':`Déconnecté (${d.mqtt_state})`;$('heap').textContent=`${Math.round(Number(d.heap_free||0)/1024)} kB`;
+    const t=d.ecs.temp_c;$('ecsTemp').textContent=t==null?'—':Number(t).toFixed(1)+' °C';$('ecsTemp').style.color=d.ecs.at_max?'var(--red)':d.ecs.temp_hold?'var(--yellow)':tempColor(t);$('ecsMax').textContent=`Tmax ${d.ecs.max_c||'—'} °C${d.ecs.remote_max_c?' · RobotDyn':''}`;const release=d.ecs.release_c;$('ecsTrigger').textContent=release==null?'Reprise —':`Reprise ${Number(release).toFixed(1)} °C · trigger ${d.ecs.trigger_percent==null?'secours':d.ecs.trigger_percent+' %'}`;
+    const g=Number(d.grid_w||0);if(g>20){$('grid').textContent=fmtW(g);$('grid').className='value red';$('gridMode').textContent='Import réseau';}else if(g<-20){$('grid').textContent=fmtW(g);$('grid').className='value cyan';$('gridMode').textContent='Export réseau';}else{$('grid').textContent='0 W';$('grid').className='value green';$('gridMode').textContent='Zero Grid';}
+    let heroBg='var(--cyan)',heroText='#071216',heroLabel='ZERO GRID',heroValue=fmtW(d.available_w),note='Réseau proche de zéro';if(g>20){heroBg='var(--red)';heroText='#fff';heroLabel='IMPORT';heroValue=fmtW(g);note='Consommation depuis le réseau';}else if(Number(d.available_w)>2000){heroBg='var(--green)';heroText='#07120c';heroLabel='DISPO';heroValue=fmtW(d.available_w);note='Surplus PV disponible, chauffe-eau inclus';}else if(Number(d.available_w)>20){heroBg='var(--orange)';heroText='#1b1307';heroLabel='DISPO';heroValue=fmtW(d.available_w);note='Surplus PV disponible';}$('hero').style.background=heroBg;$('hero').style.color=heroText;$('heroLabel').textContent=heroLabel;$('heroValue').textContent=heroValue;$('heroState').textContent=d.status;$('heroNote').textContent=note;
+    const gaugeValue=g>20?-g:Number(d.available_w||0);$('marker').style.left=markerFor(gaugeValue);
+    const r=d.regulation||{target_w:-15,low_w:-25,high_w:-5,correction_w:-15-g,heater_model_w:800,max_dimmer_percent:100,max_heater_w:800};$('target').textContent=signedW(r.target_w);$('band').textContent=`${r.low_w} … ${r.high_w} W`;$('gridMeasured').textContent=signedW(g);const correctionW=Number(r.correction_w||0),maxHeaterW=Number(r.max_heater_w??r.heater_model_w??800),heaterHeadroom=Math.max(0,maxHeaterW-Number(d.dimmer.heater_w||0)),maxDimmer=Number(r.max_dimmer_percent??100);if(correctionW>0&&d.dimmer.cmd>=maxDimmer-1&&heaterHeadroom<=5)$('correction').textContent=`Besoin ${signedW(correctionW)} · CE saturé`;else if(correctionW>0)$('correction').textContent=`Besoin ${signedW(correctionW)} · marge ${fmtW(heaterHeadroom)}`;else $('correction').textContent=signedW(correctionW);$('regCmdActual').textContent=`${d.dimmer.cmd}% / ${d.dimmer.actual}%`;$('heaterModel').textContent=`${r.heater_model_w||800} W`;
+    let chips='';chips+=chip('Fronius '+(d.fronius?'OK':'OFF'),d.fronius?'ok':'err');chips+=chip('Dimmer '+(d.dimmer.online?'OK':'OFF'),d.dimmer.online?'ok':'err');chips+=chip(d.dimmer.synced?'Synchronisé':'Synchronisation',d.dimmer.synced?'ok':'warn');chips+=chip('MQTT '+(d.mqtt_connected?'OK':'OFF'),d.mqtt_connected?'ok':'warn');if(d.ecs.at_max)chips+=chip('TEMP MAX','err');else if(d.ecs.temp_hold)chips+=chip(`ECS attente ${d.ecs.release_c==null?'reprise':Number(d.ecs.release_c).toFixed(1)+' °C'}`,'warn');else if(d.dimmer.alarm)chips+=chip('Alarme dimmer','err');else chips+=chip('ECS OK','ok');$('chips').innerHTML=chips;
+    addHistory(d);
+  }
 
-  <!-- Custom scripts for all pages-->
-  <script src="/sb-admin-2.js"></script>
- <script>
-
-
-
-
+  async function refresh(){try{const r=await fetch('/api/status',{cache:'no-store'});if(!r.ok)throw new Error(r.status);render(await r.json())}catch(e){document.body.classList.add('offline');$('deviceLine').textContent='Serveur indisponible';$('heroState').textContent='OFFLINE'}}
+  async function toggleScreen(){try{await fetch('/api/screen/toggle',{method:'POST'})}catch(e){}}
+  function toast(msg){$('toast').textContent=msg;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),2200)}
+  async function copyDiagnostic(){
+    if(!lastStatus){toast('Pas encore de diagnostic');return}const d=lastStatus,r=d.regulation||{};
+    const text=[`PV Router ${d.version||'—'}`,`IP: ${d.ip||'—'} | SSID: ${d.wifi_ssid||'—'} | ESP RSSI: ${d.wifi_rssi} dBm`,`Uptime: ${uptime(d.uptime_s)} | Heap: ${Math.round(Number(d.heap_free||0)/1024)} kB | MQTT: ${d.mqtt_connected?'OK':'OFF'} (${d.mqtt_state})`,`Etat: ${d.status||'—'} | Fronius: ${d.fronius?'OK':'OFF'} age=${age(d.fronius_age_ms)}`,`PV=${Math.round(d.pv_w)} W GRID=${Math.round(d.grid_w)} W HOUSE=${Math.round(d.house_w)} W DISPO=${Math.round(d.available_w)} W`,`ZeroGrid ${r.version||'V14.3'} target=${r.target_w??-15} W band=${r.low_w??-25}..${r.high_w??-5} W correction=${r.correction_w??'—'} W`,`Dimmer: online=${d.dimmer.online} sync=${d.dimmer.synced} CMD=${d.dimmer.cmd}% ACTUAL=${d.dimmer.actual}% LOAD=${d.dimmer.heater_w} W RSSI=${d.dimmer.rssi} dBm age=${age(d.dimmer.age_ms)}`,`ECS: ${d.ecs.temp_c==null?'—':Number(d.ecs.temp_c).toFixed(1)} / ${d.ecs.max_c||'—'} °C | trigger=${d.ecs.trigger_percent==null?'fallback':d.ecs.trigger_percent+'%'} | release=${d.ecs.release_c==null?'—':Number(d.ecs.release_c).toFixed(2)+'°C'} | hold=${!!d.ecs.temp_hold} | alarm=${d.dimmer.alarm} | ${d.dimmer.alert||'RAS'}`].join('\n');
+    try{await navigator.clipboard.writeText(text);toast('Diagnostic copié')}catch(e){const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();toast('Diagnostic copié')}
+  }
+  window.addEventListener('resize',()=>drawHistory());refresh();setInterval(refresh,2000);
 </script>
-
 </body>
-
 </html>
