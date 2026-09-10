@@ -112,7 +112,10 @@ static bool handleSolarForecastPayload(const byte *payload, unsigned int length)
 {
   if (!payload || length == 0 || length > 900) return false;
 
-  JsonDocument doc;
+  // The project currently pins ArduinoJson 6.21.x, where JsonDocument itself
+  // is abstract/protected. A fixed document avoids heap allocation and keeps
+  // the incoming MQTT parser bounded.
+  StaticJsonDocument<1024> doc;
   const DeserializationError err = deserializeJson(doc, payload, length);
   if (err) {
     Serial.printf("[FORECAST] invalid JSON: %s\n", err.c_str());
@@ -141,19 +144,19 @@ static bool handleSolarForecastPayload(const byte *payload, unsigned int length)
     return false;
   }
 
+  const char *weatherText = root["weather"] | "unknown";
   gSolarForecast.p2500Start = p2500Start;
   gSolarForecast.p2500End = p2500End;
   gSolarForecast.p2000Start = p2000Start;
   gSolarForecast.p2000End = p2000End;
-  gSolarForecast.weather =
-      solarForecastWeatherFromString(root["weather"] | String("unknown"));
+  gSolarForecast.weather = solarForecastWeatherFromString(String(weatherText));
   gSolarForecast.validUntilEpoch = root["valid_until"] | 0UL;
   gSolarForecast.receivedMs = millis();
   gSolarForecast.valid = true;
   gSolarForecast.revision++;
 
   Serial.printf("[FORECAST] %s | 2.5k %s>%s | 2.0k %s>%s\n",
-                (const char*)(root["weather"] | "unknown"),
+                weatherText,
                 gSolarForecast.p2500Start.c_str(),
                 gSolarForecast.p2500End.c_str(),
                 gSolarForecast.p2000Start.c_str(),
