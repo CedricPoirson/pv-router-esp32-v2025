@@ -31,10 +31,11 @@ struct SolarForecastData {
 
 static SolarForecastData gSolarForecast;
 
-// timeClient is defined in main.cpp. Declaring it here lets us reject a
-// retained forecast once NTP time is available, without coupling the router to
-// Solcast or to Internet access.
+// timeClient is defined in main.cpp. NTPClient includes the configured local
+// offset in getEpochTime(), so keep the active Europe/Paris offset beside it in
+// order to compare Home Assistant Unix timestamps against true UTC.
 extern NTPClient timeClient;
+extern long gNtpParisOffsetSeconds;
 
 static bool solarForecastValidClock(const String &value)
 {
@@ -85,12 +86,19 @@ static bool solarForecastIsFresh()
     return false;
   }
 
-  // valid_until is optional but strongly recommended. It also protects against
-  // an old retained MQTT message after an ESP32 reboot. Wait until NTP has a
-  // plausible epoch before enforcing the absolute expiry.
+  // valid_until is an absolute Unix timestamp produced by Home Assistant and
+  // therefore UTC. NTPClient's getEpochTime() includes our Europe/Paris display
+  // offset, so remove that offset before comparing. This avoids CEST/CET making
+  // a fresh forecast look one or two hours older than it really is.
   if (gSolarForecast.validUntilEpoch > 0) {
-    const uint32_t nowEpoch = (uint32_t)timeClient.getEpochTime();
-    if (nowEpoch > 1700000000UL && nowEpoch > gSolarForecast.validUntilEpoch) {
+    const int64_t localEpoch = (int64_t)timeClient.getEpochTime();
+    const int64_t nowUtcEpoch = localEpoch - (int64_t)gNtpParisOffsetSeconds;
+
+    // Before the first successful NTP sync, NTPClient does not yet expose a
+    // plausible Unix epoch. In that case rely on the local eight-hour TTL above
+    // until time becomes valid.
+    if (nowUtcEpoch > 1700000000LL &&
+        (uint32_t)nowUtcEpoch > gSolarForecast.validUntilEpoch) {
       return false;
     }
   }
