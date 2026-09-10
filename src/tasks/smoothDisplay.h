@@ -691,7 +691,7 @@ static void drawTTGOSmoothDiagnostic(bool fullRedraw)
   else if (rssi >= -75) wifiColor = TFT_YELLOW;
   if (fullRedraw || !gSmoothDiagnosticCache.valid ||
       gSmoothDiagnosticCache.rssi != rssi ||
-      gSmoothDiagnosticCache.wifiColor != wifiColor) {
+      gSmoothDashboardCache.tempColor != wifiColor) {
     drawSmoothDiagnosticValue(String(rssi) + " dBm", 22, wifiColor);
     gSmoothDiagnosticCache.rssi = rssi;
     gSmoothDiagnosticCache.wifiColor = wifiColor;
