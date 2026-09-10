@@ -12,6 +12,7 @@
     extern void reconnectWifiIfNeeded();
     extern DisplayValues gDisplayValues;
     extern NTPClient timeClient;
+    extern long gNtpParisOffsetSeconds;
 
     // Day of week for a Gregorian date: Sunday = 0 ... Saturday = 6.
     static int ntpDayOfWeek(int year, int month, int day)
@@ -67,6 +68,7 @@
 
         const bool summerTime = ntpParisSummerTime(utcEpoch);
         const long parisOffsetSeconds = summerTime ? 7200L : 3600L;
+        gNtpParisOffsetSeconds = parisOffsetSeconds;
         timeClient.setTimeOffset(parisOffsetSeconds);
 
         Serial.printf("[NTP] Europe/Paris: %s UTC%+ldh -> %s\n",
