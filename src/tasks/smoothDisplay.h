@@ -22,6 +22,7 @@ struct SmoothDashboardCache {
   int bannerMode = -1;
   int bannerBg = 0;
   int bannerWatts = 0;
+  int bannerWeather = -2;
   int pvWatts = 0;
   int gridWatts = 0;
   int gridMode = -1;
@@ -114,6 +115,64 @@ static void drawSmoothGaugeTTGO(int watts, bool valid, bool fullRedraw)
   lastMarkerX = newMarkerX;
 }
 
+static void drawSolarForecastWeatherIconTTGO(int x, int y,
+                                             SolarForecastWeather weather,
+                                             int contrast,
+                                             int bg)
+{
+  // 22x22 vector pictogram designed for the free right side of the large
+  // coloured banner. Shapes are deliberately bold so they remain recognisable
+  // on the 1.14-inch TTGO panel instead of looking like isolated pixels.
+  display.fillRect(x - 1, y - 1, 23, 23, bg);
+
+  if (weather == SOLAR_WEATHER_SUNNY) {
+    const int cx = x + 10;
+    const int cy = y + 10;
+    display.fillCircle(cx, cy, 5, TFT_YELLOW);
+    display.drawCircle(cx, cy, 5, contrast);
+    display.drawFastVLine(cx, y, 3, contrast);
+    display.drawFastVLine(cx, y + 18, 3, contrast);
+    display.drawFastHLine(x, cy, 3, contrast);
+    display.drawFastHLine(x + 18, cy, 3, contrast);
+    display.drawLine(x + 3, y + 3, x + 5, y + 5, contrast);
+    display.drawLine(x + 15, y + 5, x + 17, y + 3, contrast);
+    display.drawLine(x + 3, y + 17, x + 5, y + 15, contrast);
+    display.drawLine(x + 15, y + 15, x + 17, y + 17, contrast);
+    return;
+  }
+
+  if (weather == SOLAR_WEATHER_VARIABLE) {
+    // Sun behind a solid cloud. The sun keeps its yellow fill but gets a
+    // contrast outline/rays so it is still visible on orange/green banners.
+    display.fillCircle(x + 6, y + 6, 4, TFT_YELLOW);
+    display.drawCircle(x + 6, y + 6, 4, contrast);
+    display.drawFastVLine(x + 6, y, 2, contrast);
+    display.drawFastHLine(x, y + 6, 2, contrast);
+    display.drawLine(x + 1, y + 1, x + 2, y + 2, contrast);
+    display.drawLine(x + 10, y + 2, x + 12, y, contrast);
+
+    display.fillCircle(x + 9, y + 13, 4, contrast);
+    display.fillCircle(x + 14, y + 11, 5, contrast);
+    display.fillCircle(x + 18, y + 14, 3, contrast);
+    display.fillRect(x + 6, y + 13, 15, 5, contrast);
+    return;
+  }
+
+  if (weather == SOLAR_WEATHER_CLOUDY) {
+    display.fillCircle(x + 6, y + 13, 4, contrast);
+    display.fillCircle(x + 11, y + 10, 6, contrast);
+    display.fillCircle(x + 17, y + 13, 4, contrast);
+    display.fillRect(x + 4, y + 13, 17, 6, contrast);
+    return;
+  }
+
+  // Unknown forecast: neutral outlined cloud rather than a meaningless dot.
+  display.drawCircle(x + 7, y + 13, 4, contrast);
+  display.drawCircle(x + 12, y + 11, 5, contrast);
+  display.drawCircle(x + 17, y + 13, 4, contrast);
+  display.drawFastHLine(x + 4, y + 17, 17, contrast);
+}
+
 static void drawSmoothBannerTTGO(int mode,
                                  int bg,
                                  int fg,
@@ -197,52 +256,25 @@ static void drawSmoothBannerTTGO(int mode,
     display.print(value);
   }
 
+  // Forecast weather is informational only. Put a real 22x22 vector icon in
+  // the unused right side of the banner and keep both central text positions
+  // untouched. The icon is independently cached so normal 2 s redraws do not
+  // flash the coloured rectangle.
+  const bool forecastFresh = solarForecastIsFresh();
+  const int bannerWeather = forecastFresh ? (int)gSolarForecast.weather : -1;
+  if (styleChanged || !cacheValid ||
+      gSmoothDashboardCache.bannerWeather != bannerWeather) {
+    display.fillRect(211, 28, 28, 27, bg);
+    if (forecastFresh) {
+      drawSolarForecastWeatherIconTTGO(214, 30,
+                                       gSolarForecast.weather, fg, bg);
+    }
+    gSmoothDashboardCache.bannerWeather = bannerWeather;
+  }
+
   gSmoothDashboardCache.bannerMode = mode;
   gSmoothDashboardCache.bannerBg = bg;
   gSmoothDashboardCache.bannerWatts = watts;
-}
-
-static int solarForecastColorTTGO(SolarForecastWeather weather)
-{
-  if (weather == SOLAR_WEATHER_SUNNY) return TFT_YELLOW;
-  if (weather == SOLAR_WEATHER_VARIABLE) return TFT_ORANGE;
-  if (weather == SOLAR_WEATHER_CLOUDY) return TFT_LIGHTGREY;
-  return TFT_DARKGREY;
-}
-
-static void drawSolarForecastWeatherIconTTGO(int x, int y,
-                                             SolarForecastWeather weather)
-{
-  const int color = solarForecastColorTTGO(weather);
-
-  if (weather == SOLAR_WEATHER_SUNNY) {
-    display.fillCircle(x + 4, y + 4, 2, color);
-    display.drawPixel(x + 4, y, color);
-    display.drawPixel(x + 4, y + 8, color);
-    display.drawPixel(x, y + 4, color);
-    display.drawPixel(x + 8, y + 4, color);
-    display.drawPixel(x + 1, y + 1, color);
-    display.drawPixel(x + 7, y + 1, color);
-    display.drawPixel(x + 1, y + 7, color);
-    display.drawPixel(x + 7, y + 7, color);
-    return;
-  }
-
-  if (weather == SOLAR_WEATHER_VARIABLE) {
-    display.fillCircle(x + 3, y + 3, 2, TFT_YELLOW);
-    display.fillCircle(x + 6, y + 6, 3, color);
-    display.fillRect(x + 2, y + 6, 8, 3, color);
-    return;
-  }
-
-  if (weather == SOLAR_WEATHER_CLOUDY) {
-    display.fillCircle(x + 4, y + 5, 3, color);
-    display.fillCircle(x + 7, y + 5, 3, color);
-    display.fillRect(x + 1, y + 5, 9, 4, color);
-    return;
-  }
-
-  display.drawRect(x + 1, y + 1, 8, 8, color);
 }
 
 static String solarForecastCompactClockTTGO(const String &clock)
@@ -274,13 +306,11 @@ static String solarForecastCompactLineTTGO(const char *threshold,
 
 static void drawSolarForecastTTGO()
 {
-  // Font 2 is materially easier to read on the 1.14-inch panel. Compact
-  // :00 timestamps keep both threshold windows on screen at the same time.
+  // Weather pictogram now lives in the coloured banner. The full lower-right
+  // width is therefore available for two large, right-aligned forecast lines.
   display.setTextSize(1);
   display.setTextFont(2);
   display.setTextColor(TFT_WHITE, TFT_BLACK);
-
-  drawSolarForecastWeatherIconTTGO(129, 83, gSolarForecast.weather);
 
   const String line2500 =
       solarForecastCompactLineTTGO("2.5k", gSolarForecast.p2500Start,
@@ -289,15 +319,14 @@ static void drawSolarForecastTTGO()
       solarForecastCompactLineTTGO("2k", gSolarForecast.p2000Start,
                                    gSolarForecast.p2000End);
 
-  const int firstMinX = 141;
+  const int minX = 129;
   int firstX = 239 - display.textWidth(line2500, 2);
-  if (firstX < firstMinX) firstX = firstMinX;
+  if (firstX < minX) firstX = minX;
   display.setCursor(firstX, 80, 2);
   display.print(line2500);
 
-  const int secondMinX = 129;
   int secondX = 239 - display.textWidth(line2000, 2);
-  if (secondX < secondMinX) secondX = secondMinX;
+  if (secondX < minX) secondX = minX;
   display.setCursor(secondX, 95, 2);
   display.print(line2000);
 }
