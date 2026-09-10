@@ -63,6 +63,10 @@ Configwifi configwifi;
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, NTP_SERVER, NTP_OFFSET_SECONDS, NTP_UPDATE_INTERVAL_MS);
+// NTPClient applies this offset inside getEpochTime(). Keep the active
+// Europe/Paris value available so absolute UTC timestamps (e.g. Solcast
+// valid_until sent by Home Assistant) can be compared correctly.
+long gNtpParisOffsetSeconds = NTP_OFFSET_SECONDS;
 
 // Place to store local measurements before sending them off to AWS
 unsigned short measurements[LOCAL_MEASUREMENTS];
