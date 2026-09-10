@@ -4,6 +4,7 @@
 #ifdef TTGO
 
 #include "displayHelp.h"
+#include "../functions/solarForecast.h"
 
 // Differential renderer for the TTGO ST7789. The standard display task used
 // broad black clears before repainting dynamic areas; those blank intervals
@@ -29,6 +30,7 @@ struct SmoothDashboardCache {
   int ceRightMode = -1;
   int releaseTenths = 0;
   int houseWatts = 0;
+  unsigned long forecastRevision = 0;
 };
 
 static SmoothDashboardCache gSmoothDashboardCache;
@@ -118,7 +120,9 @@ static void drawSmoothBannerTTGO(int mode,
                                  bool fullRedraw)
 {
   const int bannerY = 20;
-  const int bannerH = 47;
+  // V15: only the unused bottom margin is reduced. Label and large numeric
+  // value keep exactly the same coordinates as V14.9.
+  const int bannerH = 45;
   const bool cacheValid = gSmoothDashboardCache.valid;
 
   String label;
@@ -166,7 +170,8 @@ static void drawSmoothBannerTTGO(int mode,
   }
   else if (gSmoothDashboardCache.bannerWatts != watts) {
     // Same banner colour/label: erase only the old numeric glyph footprint.
-    // Because the erase colour equals the final background, no flash is seen.
+    // Limit the erase to the shortened banner so it never paints over the
+    // first information row below it.
     display.setTextSize(1);
     display.setTextFont(4);
     const String oldValue =
@@ -177,7 +182,8 @@ static void drawSmoothBannerTTGO(int mode,
     const int newW = display.textWidth(value, 4) + 4;
     const int clearW = max(oldW, newW);
     const int clearX = max(0, (240 - clearW) / 2);
-    display.fillRect(clearX, bannerY + 17, min(clearW, 240 - clearX), 30, bg);
+    display.fillRect(clearX, bannerY + 17,
+                     min(clearW, 240 - clearX), bannerH - 17, bg);
 
     const int valueWidth = display.textWidth(value, 4) + 1;
     int valueX = (240 - valueWidth) / 2;
@@ -193,6 +199,70 @@ static void drawSmoothBannerTTGO(int mode,
   gSmoothDashboardCache.bannerMode = mode;
   gSmoothDashboardCache.bannerBg = bg;
   gSmoothDashboardCache.bannerWatts = watts;
+}
+
+static int solarForecastColorTTGO(SolarForecastWeather weather)
+{
+  if (weather == SOLAR_WEATHER_SUNNY) return TFT_YELLOW;
+  if (weather == SOLAR_WEATHER_VARIABLE) return TFT_ORANGE;
+  if (weather == SOLAR_WEATHER_CLOUDY) return TFT_LIGHTGREY;
+  return TFT_DARKGREY;
+}
+
+static void drawSolarForecastWeatherIconTTGO(int x, int y,
+                                             SolarForecastWeather weather)
+{
+  const int color = solarForecastColorTTGO(weather);
+
+  if (weather == SOLAR_WEATHER_SUNNY) {
+    display.fillCircle(x + 4, y + 4, 2, color);
+    display.drawPixel(x + 4, y, color);
+    display.drawPixel(x + 4, y + 8, color);
+    display.drawPixel(x, y + 4, color);
+    display.drawPixel(x + 8, y + 4, color);
+    display.drawPixel(x + 1, y + 1, color);
+    display.drawPixel(x + 7, y + 1, color);
+    display.drawPixel(x + 1, y + 7, color);
+    display.drawPixel(x + 7, y + 7, color);
+    return;
+  }
+
+  if (weather == SOLAR_WEATHER_VARIABLE) {
+    display.fillCircle(x + 3, y + 3, 2, TFT_YELLOW);
+    display.fillCircle(x + 6, y + 6, 3, color);
+    display.fillRect(x + 2, y + 6, 8, 3, color);
+    return;
+  }
+
+  if (weather == SOLAR_WEATHER_CLOUDY) {
+    display.fillCircle(x + 4, y + 5, 3, color);
+    display.fillCircle(x + 7, y + 5, 3, color);
+    display.fillRect(x + 1, y + 5, 9, 4, color);
+    return;
+  }
+
+  display.drawRect(x + 1, y + 1, 8, 8, color);
+}
+
+static void drawSolarForecastTTGO()
+{
+  display.setTextSize(1);
+  display.setTextFont(1);
+  display.setTextColor(TFT_WHITE, TFT_BLACK);
+
+  drawSolarForecastWeatherIconTTGO(129, 86, gSolarForecast.weather);
+
+  const String line2500 =
+      solarForecastWindowLine("2.5k", gSolarForecast.p2500Start,
+                              gSolarForecast.p2500End);
+  const String line2000 =
+      solarForecastWindowLine("2.0k", gSolarForecast.p2000Start,
+                              gSolarForecast.p2000End);
+
+  display.setCursor(141, 86, 1);
+  display.print(line2500);
+  display.setCursor(141, 96, 1);
+  display.print(line2000);
 }
 
 static void drawTTGOSmoothDashboard(bool fullRedraw)
@@ -395,14 +465,15 @@ static void drawTTGOSmoothDashboard(bool fullRedraw)
   }
   drawSmoothBannerTTGO(bannerMode, bannerBg, bannerFg, bannerWatts, fullRedraw);
 
-  // PV field.
+  // V15 shifts the two information rows up by two pixels. The large banner
+  // content itself is untouched; only its unused bottom margin was removed.
   if (fullRedraw || !gSmoothDashboardCache.valid ||
       gSmoothDashboardCache.pvWatts != pvPower) {
-    display.fillRect(0, 68, 118, 20, TFT_BLACK);
+    display.fillRect(0, 65, 118, 20, TFT_BLACK);
     display.setTextSize(1); display.setTextFont(2);
-    drawSunIcon(2, 69, TFT_YELLOW);
+    drawSunIcon(2, 66, TFT_YELLOW);
     display.setTextColor(TFT_GREEN, TFT_BLACK);
-    display.setCursor(20, 70, 2);
+    display.setCursor(20, 67, 2);
     display.print("PV ");
     display.print(formatPowerTTGO(pvPower));
     gSmoothDashboardCache.pvWatts = pvPower;
@@ -412,23 +483,23 @@ static void drawTTGOSmoothDashboard(bool fullRedraw)
   if (fullRedraw || !gSmoothDashboardCache.valid ||
       gSmoothDashboardCache.gridWatts != grid ||
       gSmoothDashboardCache.gridMode != gridMode) {
-    display.fillRect(118, 68, 122, 20, TFT_BLACK);
+    display.fillRect(118, 65, 122, 20, TFT_BLACK);
     display.setTextSize(1); display.setTextFont(2);
     if (gridMode == 1) {
-      drawGridArrowIcon(119, 71, true, TFT_CYAN);
+      drawGridArrowIcon(119, 68, true, TFT_CYAN);
       display.setTextColor(TFT_CYAN, TFT_BLACK);
-      display.setCursor(135, 70, 2);
+      display.setCursor(135, 67, 2);
       display.print("EXP "); display.print(formatPowerTTGO(-grid));
     }
     else if (gridMode == 2) {
-      drawGridArrowIcon(119, 71, false, TFT_RED);
+      drawGridArrowIcon(119, 68, false, TFT_RED);
       display.setTextColor(TFT_RED, TFT_BLACK);
-      display.setCursor(135, 70, 2);
+      display.setCursor(135, 67, 2);
       display.print("IMP "); display.print(formatPowerTTGO(grid));
     }
     else {
       display.setTextColor(TFT_WHITE, TFT_BLACK);
-      display.setCursor(135, 70, 2); display.print("GRID 0 W");
+      display.setCursor(135, 67, 2); display.print("GRID 0 W");
     }
     gSmoothDashboardCache.gridWatts = grid;
     gSmoothDashboardCache.gridMode = gridMode;
@@ -437,57 +508,53 @@ static void drawTTGOSmoothDashboard(bool fullRedraw)
   if (fullRedraw || !gSmoothDashboardCache.valid ||
       gSmoothDashboardCache.dimmerPercent != reportedDimmer ||
       gSmoothDashboardCache.heaterWatts != heaterPower) {
-    display.fillRect(0, 89, 128, 18, TFT_BLACK);
+    display.fillRect(0, 85, 128, 20, TFT_BLACK);
     display.setTextSize(1); display.setTextFont(2);
-    drawHeaterIcon(2, 90, TFT_ORANGE);
+    drawHeaterIcon(2, 86, TFT_ORANGE);
     display.setTextColor(TFT_WHITE, TFT_BLACK);
-    display.setCursor(20, 91, 2); display.printf("CE %d%%", reportedDimmer);
-    display.setCursor(87, 91, 2); display.printf("%dW", heaterPower);
+    display.setCursor(20, 87, 2); display.printf("CE %d%%", reportedDimmer);
+    display.setCursor(87, 87, 2); display.printf("%dW", heaterPower);
     gSmoothDashboardCache.dimmerPercent = reportedDimmer;
     gSmoothDashboardCache.heaterWatts = heaterPower;
   }
 
+  // Lower-right priority in V15:
+  // START (short transient) > fresh solar forecast > house consumption.
+  // TEMP HOLD remains clearly visible in the header; the redundant REPRISE
+  // temperature is intentionally removed from the main screen.
+  const bool forecastFresh = solarForecastIsFresh();
   int ceRightMode = 0;
-  if (heaterTempHold) ceRightMode = 1;
-  else if (dimmerStarting) ceRightMode = 2;
+  if (dimmerStarting) ceRightMode = 2;
+  else if (forecastFresh) ceRightMode = 4;
   else if (gDisplayValues.froniusup) ceRightMode = 3;
-  const int releaseTenths = tenthsTTGO(gDisplayValues.dimmerReleaseTemp);
 
   const bool ceRightChanged =
       fullRedraw || !gSmoothDashboardCache.valid ||
       gSmoothDashboardCache.ceRightMode != ceRightMode ||
-      (ceRightMode == 1 && gSmoothDashboardCache.releaseTenths != releaseTenths) ||
-      (ceRightMode == 3 && gSmoothDashboardCache.houseWatts != housePower);
+      (ceRightMode == 3 && gSmoothDashboardCache.houseWatts != housePower) ||
+      (ceRightMode == 4 &&
+       gSmoothDashboardCache.forecastRevision != gSolarForecast.revision);
 
   if (ceRightChanged) {
-    display.fillRect(128, 89, 112, 18, TFT_BLACK);
-    display.setTextSize(1); display.setTextFont(2);
-    if (ceRightMode == 1) {
-      display.setTextColor(TFT_ORANGE, TFT_BLACK);
-      display.setCursor(129, 91, 2);
-      display.print("REPRISE ");
-      const String releaseText =
-          gDisplayValues.dimmerReleaseTemp > 0.0f
-              ? String(gDisplayValues.dimmerReleaseTemp, 0)
-              : "--";
-      display.print(releaseText);
-      const int degreeX = 129 + display.textWidth("REPRISE ", 2) +
-                          display.textWidth(releaseText, 2) + 1;
-      drawDegreeCUnitTTGO(degreeX, 91, 2, TFT_ORANGE, TFT_BLACK);
-    }
-    else if (ceRightMode == 2) {
+    display.fillRect(128, 85, 112, 20, TFT_BLACK);
+    if (ceRightMode == 2) {
+      display.setTextSize(1); display.setTextFont(2);
       display.setTextColor(TFT_YELLOW, TFT_BLACK);
-      display.setCursor(145, 91, 2); display.print("START");
+      display.setCursor(145, 87, 2); display.print("START");
+    }
+    else if (ceRightMode == 4) {
+      drawSolarForecastTTGO();
     }
     else if (ceRightMode == 3) {
-      drawHouseIcon(133, 90, TFT_WHITE);
+      display.setTextSize(1); display.setTextFont(2);
+      drawHouseIcon(133, 86, TFT_WHITE);
       display.setTextColor(TFT_WHITE, TFT_BLACK);
-      display.setCursor(151, 91, 2);
+      display.setCursor(151, 87, 2);
       display.print(formatPowerTTGO(housePower));
     }
     gSmoothDashboardCache.ceRightMode = ceRightMode;
-    gSmoothDashboardCache.releaseTenths = releaseTenths;
     gSmoothDashboardCache.houseWatts = housePower;
+    gSmoothDashboardCache.forecastRevision = gSolarForecast.revision;
   }
 
   drawSmoothGaugeTTGO(gaugePower, gDisplayValues.froniusup, fullRedraw);
