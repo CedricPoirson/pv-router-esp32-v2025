@@ -120,57 +120,66 @@ static void drawSolarForecastWeatherIconTTGO(int x, int y,
                                              int contrast,
                                              int bg)
 {
-  // 22x22 vector pictogram designed for the free right side of the large
-  // coloured banner. Shapes are deliberately bold so they remain recognisable
-  // on the 1.14-inch TTGO panel instead of looking like isolated pixels.
-  display.fillRect(x - 1, y - 1, 23, 23, bg);
+  // 28x28 vector pictogram for the free right side of the coloured banner.
+  // Rays/cloud masses are deliberately thicker than the previous 22 px icon
+  // so the weather remains recognisable from several metres away.
+  display.fillRect(x - 1, y - 1, 29, 29, bg);
 
   if (weather == SOLAR_WEATHER_SUNNY) {
-    const int cx = x + 10;
-    const int cy = y + 10;
-    display.fillCircle(cx, cy, 5, TFT_YELLOW);
-    display.drawCircle(cx, cy, 5, contrast);
-    display.drawFastVLine(cx, y, 3, contrast);
-    display.drawFastVLine(cx, y + 18, 3, contrast);
-    display.drawFastHLine(x, cy, 3, contrast);
-    display.drawFastHLine(x + 18, cy, 3, contrast);
-    display.drawLine(x + 3, y + 3, x + 5, y + 5, contrast);
-    display.drawLine(x + 15, y + 5, x + 17, y + 3, contrast);
-    display.drawLine(x + 3, y + 17, x + 5, y + 15, contrast);
-    display.drawLine(x + 15, y + 15, x + 17, y + 17, contrast);
+    const int cx = x + 13;
+    const int cy = y + 13;
+    display.fillCircle(cx, cy, 6, TFT_YELLOW);
+    display.drawCircle(cx, cy, 6, contrast);
+
+    // Four bold cardinal rays.
+    display.fillRect(cx - 1, y, 2, 4, contrast);
+    display.fillRect(cx - 1, y + 23, 2, 4, contrast);
+    display.fillRect(x, cy - 1, 4, 2, contrast);
+    display.fillRect(x + 23, cy - 1, 4, 2, contrast);
+
+    // Four diagonal rays.
+    display.drawLine(x + 3, y + 3, x + 6, y + 6, contrast);
+    display.drawLine(x + 4, y + 3, x + 7, y + 6, contrast);
+    display.drawLine(x + 20, y + 6, x + 23, y + 3, contrast);
+    display.drawLine(x + 19, y + 6, x + 22, y + 3, contrast);
+    display.drawLine(x + 3, y + 23, x + 6, y + 20, contrast);
+    display.drawLine(x + 4, y + 23, x + 7, y + 20, contrast);
+    display.drawLine(x + 20, y + 20, x + 23, y + 23, contrast);
+    display.drawLine(x + 19, y + 20, x + 22, y + 23, contrast);
     return;
   }
 
   if (weather == SOLAR_WEATHER_VARIABLE) {
-    // Sun behind a solid cloud. The sun keeps its yellow fill but gets a
-    // contrast outline/rays so it is still visible on orange/green banners.
-    display.fillCircle(x + 6, y + 6, 4, TFT_YELLOW);
-    display.drawCircle(x + 6, y + 6, 4, contrast);
-    display.drawFastVLine(x + 6, y, 2, contrast);
-    display.drawFastHLine(x, y + 6, 2, contrast);
-    display.drawLine(x + 1, y + 1, x + 2, y + 2, contrast);
-    display.drawLine(x + 10, y + 2, x + 12, y, contrast);
+    // Large sun behind a bold cloud. Yellow remains visible on every banner,
+    // while the contrast outline/cloud keeps the icon legible on orange,
+    // green, cyan, red and grey backgrounds.
+    display.fillCircle(x + 8, y + 8, 5, TFT_YELLOW);
+    display.drawCircle(x + 8, y + 8, 5, contrast);
+    display.fillRect(x + 7, y, 2, 3, contrast);
+    display.fillRect(x, y + 7, 3, 2, contrast);
+    display.drawLine(x + 2, y + 2, x + 4, y + 4, contrast);
+    display.drawLine(x + 12, y + 4, x + 15, y + 1, contrast);
 
-    display.fillCircle(x + 9, y + 13, 4, contrast);
-    display.fillCircle(x + 14, y + 11, 5, contrast);
-    display.fillCircle(x + 18, y + 14, 3, contrast);
-    display.fillRect(x + 6, y + 13, 15, 5, contrast);
+    display.fillCircle(x + 11, y + 19, 5, contrast);
+    display.fillCircle(x + 18, y + 16, 7, contrast);
+    display.fillCircle(x + 24, y + 20, 4, contrast);
+    display.fillRect(x + 7, y + 19, 21, 7, contrast);
     return;
   }
 
   if (weather == SOLAR_WEATHER_CLOUDY) {
-    display.fillCircle(x + 6, y + 13, 4, contrast);
-    display.fillCircle(x + 11, y + 10, 6, contrast);
-    display.fillCircle(x + 17, y + 13, 4, contrast);
-    display.fillRect(x + 4, y + 13, 17, 6, contrast);
+    display.fillCircle(x + 8, y + 18, 5, contrast);
+    display.fillCircle(x + 15, y + 14, 8, contrast);
+    display.fillCircle(x + 23, y + 18, 5, contrast);
+    display.fillRect(x + 5, y + 18, 23, 8, contrast);
     return;
   }
 
-  // Unknown forecast: neutral outlined cloud rather than a meaningless dot.
-  display.drawCircle(x + 7, y + 13, 4, contrast);
-  display.drawCircle(x + 12, y + 11, 5, contrast);
-  display.drawCircle(x + 17, y + 13, 4, contrast);
-  display.drawFastHLine(x + 4, y + 17, 17, contrast);
+  // Unknown forecast: a large neutral outlined cloud instead of a tiny mark.
+  display.drawCircle(x + 8, y + 18, 5, contrast);
+  display.drawCircle(x + 15, y + 15, 7, contrast);
+  display.drawCircle(x + 23, y + 18, 5, contrast);
+  display.drawFastHLine(x + 4, y + 23, 24, contrast);
 }
 
 static void drawSmoothBannerTTGO(int mode,
@@ -256,17 +265,16 @@ static void drawSmoothBannerTTGO(int mode,
     display.print(value);
   }
 
-  // Forecast weather is informational only. Put a real 22x22 vector icon in
-  // the unused right side of the banner and keep both central text positions
-  // untouched. The icon is independently cached so normal 2 s redraws do not
-  // flash the coloured rectangle.
+  // Forecast weather is informational only. The 28x28 vector icon uses the
+  // unused right side of the banner; central label/value coordinates remain
+  // untouched. Independent caching avoids flashing the coloured rectangle.
   const bool forecastFresh = solarForecastIsFresh();
   const int bannerWeather = forecastFresh ? (int)gSolarForecast.weather : -1;
   if (styleChanged || !cacheValid ||
       gSmoothDashboardCache.bannerWeather != bannerWeather) {
-    display.fillRect(211, 28, 28, 27, bg);
+    display.fillRect(208, 27, 31, 31, bg);
     if (forecastFresh) {
-      drawSolarForecastWeatherIconTTGO(214, 30,
+      drawSolarForecastWeatherIconTTGO(210, 28,
                                        gSolarForecast.weather, fg, bg);
     }
     gSmoothDashboardCache.bannerWeather = bannerWeather;
