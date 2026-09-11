@@ -98,6 +98,8 @@ Deux sécurités empêchent l'affichage d'une vieille prévision :
 - expiration absolue via `valid_until` ;
 - TTL local de 8 h depuis le dernier message MQTT reçu.
 
+Avant la première synchronisation NTP, le routeur conserve temporairement la prévision reçue et s'appuie uniquement sur le TTL local. Dès qu'une heure UTC plausible est disponible, `valid_until` est appliqué normalement.
+
 Un message :
 
 ```json
@@ -119,14 +121,20 @@ Le log série du routeur doit afficher par exemple :
 ```text
 [MQTT] subscribed pvrouter/forecast
 [FORECAST] sunny | 2.5k 10:00>18:00 | 2.0k 09:30>18:30
+[FORECAST] diag reason=ok age=0 s valid_until=1789060693 utc=1789053493 expires_in=7200 s
 ```
 
-Si le message MQTT est correct mais n'apparaît pas sur le TTGO, vérifier en priorité :
+Le champ `reason` permet de distinguer immédiatement :
 
-- `valid_until` ;
-- la synchronisation NTP ;
-- la version du firmware ;
-- que la page principale est active.
+```text
+ok                  = prévision fraîche
+waiting_ntp         = NTP pas encore synchronisé, TTL local utilisé
+no_data             = aucune prévision valide
+local_ttl_expired   = dernier MQTT reçu depuis plus de 8 h
+valid_until_expired = timestamp absolu dépassé
+```
+
+Si le message MQTT est correct mais n'apparaît pas sur le TTGO, vérifier en priorité `reason`, `expires_in`, la synchronisation NTP et la version du firmware.
 
 ## Affichage TTGO
 
