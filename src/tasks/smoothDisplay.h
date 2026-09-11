@@ -4,6 +4,7 @@
 #ifdef TTGO
 
 #include "displayHelp.h"
+#include "../functions/solarForecast.h"
 
 // Differential renderer for the TTGO ST7789. The standard display task used
 // broad black clears before repainting dynamic areas; those blank intervals
@@ -21,6 +22,7 @@ struct SmoothDashboardCache {
   int bannerMode = -1;
   int bannerBg = 0;
   int bannerWatts = 0;
+  int bannerWeather = -2;
   int pvWatts = 0;
   int gridWatts = 0;
   int gridMode = -1;
@@ -29,6 +31,7 @@ struct SmoothDashboardCache {
   int ceRightMode = -1;
   int releaseTenths = 0;
   int houseWatts = 0;
+  unsigned long forecastRevision = 0;
 };
 
 static SmoothDashboardCache gSmoothDashboardCache;
@@ -55,12 +58,13 @@ static void drawSmoothGaugeTTGO(int watts, bool valid, bool fullRedraw)
     return;
   }
 
-  // Erase only the previous cursor head. The coloured gauge itself is then
-  // repainted directly with its final colours, so it never flashes black.
+  // V15 forecast uses the narrow strip immediately above the gauge. Keep the
+  // power cursor visible but compact so its head never overlaps the second
+  // forecast line.
   if (!fullRedraw && cacheValid && lastValid && lastMarkerX >= 0) {
-    const int clearX = max(0, lastMarkerX - 8);
-    const int clearW = min(240 - clearX, 17);
-    display.fillRect(clearX, y - 10, clearW, 10, TFT_BLACK);
+    const int clearX = max(0, lastMarkerX - 6);
+    const int clearW = min(240 - clearX, 13);
+    display.fillRect(clearX, y - 4, clearW, 4, TFT_BLACK);
   }
 
   const int xMinus500 = gaugeXForPowerTTGO(-500);
@@ -78,8 +82,8 @@ static void drawSmoothGaugeTTGO(int watts, bool valid, bool fullRedraw)
   display.fillRect(xZero - 1, y - 2, 2, height + 4, TFT_LIGHTGREY);
 
   if (valid) {
-    display.fillTriangle(newMarkerX - 7, y - 10,
-                         newMarkerX + 7, y - 10,
+    display.fillTriangle(newMarkerX - 5, y - 4,
+                         newMarkerX + 5, y - 4,
                          newMarkerX, y - 1,
                          TFT_WHITE);
     display.fillRect(newMarkerX - 1, y - 1, 3, height + 2, TFT_WHITE);
@@ -111,6 +115,73 @@ static void drawSmoothGaugeTTGO(int watts, bool valid, bool fullRedraw)
   lastMarkerX = newMarkerX;
 }
 
+static void drawSolarForecastWeatherIconTTGO(int x, int y,
+                                             SolarForecastWeather weather,
+                                             int contrast,
+                                             int bg)
+{
+  // 28x28 vector pictogram for the free right side of the coloured banner.
+  // Rays/cloud masses are deliberately thicker than the previous 22 px icon
+  // so the weather remains recognisable from several metres away.
+  display.fillRect(x - 1, y - 1, 29, 29, bg);
+
+  if (weather == SOLAR_WEATHER_SUNNY) {
+    const int cx = x + 13;
+    const int cy = y + 13;
+    display.fillCircle(cx, cy, 6, TFT_YELLOW);
+    display.drawCircle(cx, cy, 6, contrast);
+
+    // Four bold cardinal rays.
+    display.fillRect(cx - 1, y, 2, 4, contrast);
+    display.fillRect(cx - 1, y + 23, 2, 4, contrast);
+    display.fillRect(x, cy - 1, 4, 2, contrast);
+    display.fillRect(x + 23, cy - 1, 4, 2, contrast);
+
+    // Four diagonal rays.
+    display.drawLine(x + 3, y + 3, x + 6, y + 6, contrast);
+    display.drawLine(x + 4, y + 3, x + 7, y + 6, contrast);
+    display.drawLine(x + 20, y + 6, x + 23, y + 3, contrast);
+    display.drawLine(x + 19, y + 6, x + 22, y + 3, contrast);
+    display.drawLine(x + 3, y + 23, x + 6, y + 20, contrast);
+    display.drawLine(x + 4, y + 23, x + 7, y + 20, contrast);
+    display.drawLine(x + 20, y + 20, x + 23, y + 23, contrast);
+    display.drawLine(x + 19, y + 20, x + 22, y + 23, contrast);
+    return;
+  }
+
+  if (weather == SOLAR_WEATHER_VARIABLE) {
+    // Large sun behind a bold cloud. Yellow remains visible on every banner,
+    // while the contrast outline/cloud keeps the icon legible on orange,
+    // green, cyan, red and grey backgrounds.
+    display.fillCircle(x + 8, y + 8, 5, TFT_YELLOW);
+    display.drawCircle(x + 8, y + 8, 5, contrast);
+    display.fillRect(x + 7, y, 2, 3, contrast);
+    display.fillRect(x, y + 7, 3, 2, contrast);
+    display.drawLine(x + 2, y + 2, x + 4, y + 4, contrast);
+    display.drawLine(x + 12, y + 4, x + 15, y + 1, contrast);
+
+    display.fillCircle(x + 11, y + 19, 5, contrast);
+    display.fillCircle(x + 18, y + 16, 7, contrast);
+    display.fillCircle(x + 24, y + 20, 4, contrast);
+    display.fillRect(x + 7, y + 19, 21, 7, contrast);
+    return;
+  }
+
+  if (weather == SOLAR_WEATHER_CLOUDY) {
+    display.fillCircle(x + 8, y + 18, 5, contrast);
+    display.fillCircle(x + 15, y + 14, 8, contrast);
+    display.fillCircle(x + 23, y + 18, 5, contrast);
+    display.fillRect(x + 5, y + 18, 23, 8, contrast);
+    return;
+  }
+
+  // Unknown forecast: a large neutral outlined cloud instead of a tiny mark.
+  display.drawCircle(x + 8, y + 18, 5, contrast);
+  display.drawCircle(x + 15, y + 15, 7, contrast);
+  display.drawCircle(x + 23, y + 18, 5, contrast);
+  display.drawFastHLine(x + 4, y + 23, 24, contrast);
+}
+
 static void drawSmoothBannerTTGO(int mode,
                                  int bg,
                                  int fg,
@@ -118,7 +189,9 @@ static void drawSmoothBannerTTGO(int mode,
                                  bool fullRedraw)
 {
   const int bannerY = 20;
-  const int bannerH = 47;
+  // V15: label and large numeric value keep exactly the V14.9 coordinates.
+  // The bottom edge alone is raised; 44 px is the safe limit for font 4.
+  const int bannerH = 44;
   const bool cacheValid = gSmoothDashboardCache.valid;
 
   String label;
@@ -166,7 +239,8 @@ static void drawSmoothBannerTTGO(int mode,
   }
   else if (gSmoothDashboardCache.bannerWatts != watts) {
     // Same banner colour/label: erase only the old numeric glyph footprint.
-    // Because the erase colour equals the final background, no flash is seen.
+    // Limit the erase to the shortened banner so it never paints over the
+    // first information row below it.
     display.setTextSize(1);
     display.setTextFont(4);
     const String oldValue =
@@ -177,7 +251,8 @@ static void drawSmoothBannerTTGO(int mode,
     const int newW = display.textWidth(value, 4) + 4;
     const int clearW = max(oldW, newW);
     const int clearX = max(0, (240 - clearW) / 2);
-    display.fillRect(clearX, bannerY + 17, min(clearW, 240 - clearX), 30, bg);
+    display.fillRect(clearX, bannerY + 17,
+                     min(clearW, 240 - clearX), bannerH - 17, bg);
 
     const int valueWidth = display.textWidth(value, 4) + 1;
     int valueX = (240 - valueWidth) / 2;
@@ -190,9 +265,78 @@ static void drawSmoothBannerTTGO(int mode,
     display.print(value);
   }
 
+  // Forecast weather is informational only. The 28x28 vector icon uses the
+  // unused right side of the banner; central label/value coordinates remain
+  // untouched. Independent caching avoids flashing the coloured rectangle.
+  const bool forecastFresh = solarForecastIsFresh();
+  const int bannerWeather = forecastFresh ? (int)gSolarForecast.weather : -1;
+  if (styleChanged || !cacheValid ||
+      gSmoothDashboardCache.bannerWeather != bannerWeather) {
+    display.fillRect(208, 27, 31, 31, bg);
+    if (forecastFresh) {
+      drawSolarForecastWeatherIconTTGO(210, 28,
+                                       gSolarForecast.weather, fg, bg);
+    }
+    gSmoothDashboardCache.bannerWeather = bannerWeather;
+  }
+
   gSmoothDashboardCache.bannerMode = mode;
   gSmoothDashboardCache.bannerBg = bg;
   gSmoothDashboardCache.bannerWatts = watts;
+}
+
+static String solarForecastCompactClockTTGO(const String &clock)
+{
+  if (clock.length() != 5) return clock;
+
+  String result = clock;
+  // 11:00 -> 11, 09:00 -> 9, 09:30 -> 9:30.
+  if (result.substring(3) == "00") {
+    result = result.substring(0, 2);
+  }
+  if (result.length() > 1 && result.charAt(0) == '0') {
+    result.remove(0, 1);
+  }
+  return result;
+}
+
+static String solarForecastCompactLineTTGO(const char *threshold,
+                                           const String &start,
+                                           const String &end)
+{
+  if (start.length() != 5 || end.length() != 5) {
+    return String(threshold) + " --";
+  }
+  return String(threshold) + " " +
+         solarForecastCompactClockTTGO(start) + ">" +
+         solarForecastCompactClockTTGO(end);
+}
+
+static void drawSolarForecastTTGO()
+{
+  // Weather pictogram now lives in the coloured banner. The full lower-right
+  // width is therefore available for two large, right-aligned forecast lines.
+  display.setTextSize(1);
+  display.setTextFont(2);
+  display.setTextColor(TFT_WHITE, TFT_BLACK);
+
+  const String line2500 =
+      solarForecastCompactLineTTGO("2.5k", gSolarForecast.p2500Start,
+                                   gSolarForecast.p2500End);
+  const String line2000 =
+      solarForecastCompactLineTTGO("2k", gSolarForecast.p2000Start,
+                                   gSolarForecast.p2000End);
+
+  const int minX = 129;
+  int firstX = 239 - display.textWidth(line2500, 2);
+  if (firstX < minX) firstX = minX;
+  display.setCursor(firstX, 80, 2);
+  display.print(line2500);
+
+  int secondX = 239 - display.textWidth(line2000, 2);
+  if (secondX < minX) secondX = minX;
+  display.setCursor(secondX, 95, 2);
+  display.print(line2000);
 }
 
 static void drawTTGOSmoothDashboard(bool fullRedraw)
@@ -395,14 +539,16 @@ static void drawTTGOSmoothDashboard(bool fullRedraw)
   }
   drawSmoothBannerTTGO(bannerMode, bannerBg, bannerFg, bannerWatts, fullRedraw);
 
-  // PV field.
+  // The first information row now begins directly after the shortened banner.
+  // Its height is tightened so the forecast can use two readable Font-2 lines
+  // without touching the gauge cursor.
   if (fullRedraw || !gSmoothDashboardCache.valid ||
       gSmoothDashboardCache.pvWatts != pvPower) {
-    display.fillRect(0, 68, 118, 20, TFT_BLACK);
+    display.fillRect(0, 64, 118, 16, TFT_BLACK);
     display.setTextSize(1); display.setTextFont(2);
-    drawSunIcon(2, 69, TFT_YELLOW);
+    drawSunIcon(2, 64, TFT_YELLOW);
     display.setTextColor(TFT_GREEN, TFT_BLACK);
-    display.setCursor(20, 70, 2);
+    display.setCursor(20, 64, 2);
     display.print("PV ");
     display.print(formatPowerTTGO(pvPower));
     gSmoothDashboardCache.pvWatts = pvPower;
@@ -412,23 +558,23 @@ static void drawTTGOSmoothDashboard(bool fullRedraw)
   if (fullRedraw || !gSmoothDashboardCache.valid ||
       gSmoothDashboardCache.gridWatts != grid ||
       gSmoothDashboardCache.gridMode != gridMode) {
-    display.fillRect(118, 68, 122, 20, TFT_BLACK);
+    display.fillRect(118, 64, 122, 16, TFT_BLACK);
     display.setTextSize(1); display.setTextFont(2);
     if (gridMode == 1) {
-      drawGridArrowIcon(119, 71, true, TFT_CYAN);
+      drawGridArrowIcon(119, 66, true, TFT_CYAN);
       display.setTextColor(TFT_CYAN, TFT_BLACK);
-      display.setCursor(135, 70, 2);
+      display.setCursor(135, 64, 2);
       display.print("EXP "); display.print(formatPowerTTGO(-grid));
     }
     else if (gridMode == 2) {
-      drawGridArrowIcon(119, 71, false, TFT_RED);
+      drawGridArrowIcon(119, 66, false, TFT_RED);
       display.setTextColor(TFT_RED, TFT_BLACK);
-      display.setCursor(135, 70, 2);
+      display.setCursor(135, 64, 2);
       display.print("IMP "); display.print(formatPowerTTGO(grid));
     }
     else {
       display.setTextColor(TFT_WHITE, TFT_BLACK);
-      display.setCursor(135, 70, 2); display.print("GRID 0 W");
+      display.setCursor(135, 64, 2); display.print("GRID 0 W");
     }
     gSmoothDashboardCache.gridWatts = grid;
     gSmoothDashboardCache.gridMode = gridMode;
@@ -437,57 +583,53 @@ static void drawTTGOSmoothDashboard(bool fullRedraw)
   if (fullRedraw || !gSmoothDashboardCache.valid ||
       gSmoothDashboardCache.dimmerPercent != reportedDimmer ||
       gSmoothDashboardCache.heaterWatts != heaterPower) {
-    display.fillRect(0, 89, 128, 18, TFT_BLACK);
+    display.fillRect(0, 80, 128, 25, TFT_BLACK);
     display.setTextSize(1); display.setTextFont(2);
-    drawHeaterIcon(2, 90, TFT_ORANGE);
+    drawHeaterIcon(2, 82, TFT_ORANGE);
     display.setTextColor(TFT_WHITE, TFT_BLACK);
-    display.setCursor(20, 91, 2); display.printf("CE %d%%", reportedDimmer);
-    display.setCursor(87, 91, 2); display.printf("%dW", heaterPower);
+    display.setCursor(20, 82, 2); display.printf("CE %d%%", reportedDimmer);
+    display.setCursor(87, 82, 2); display.printf("%dW", heaterPower);
     gSmoothDashboardCache.dimmerPercent = reportedDimmer;
     gSmoothDashboardCache.heaterWatts = heaterPower;
   }
 
+  // Lower-right priority in V15:
+  // START (short transient) > fresh solar forecast > house consumption.
+  // TEMP HOLD remains clearly visible in the header; the redundant REPRISE
+  // temperature is intentionally removed from the main screen.
+  const bool forecastFresh = solarForecastIsFresh();
   int ceRightMode = 0;
-  if (heaterTempHold) ceRightMode = 1;
-  else if (dimmerStarting) ceRightMode = 2;
+  if (dimmerStarting) ceRightMode = 2;
+  else if (forecastFresh) ceRightMode = 4;
   else if (gDisplayValues.froniusup) ceRightMode = 3;
-  const int releaseTenths = tenthsTTGO(gDisplayValues.dimmerReleaseTemp);
 
   const bool ceRightChanged =
       fullRedraw || !gSmoothDashboardCache.valid ||
       gSmoothDashboardCache.ceRightMode != ceRightMode ||
-      (ceRightMode == 1 && gSmoothDashboardCache.releaseTenths != releaseTenths) ||
-      (ceRightMode == 3 && gSmoothDashboardCache.houseWatts != housePower);
+      (ceRightMode == 3 && gSmoothDashboardCache.houseWatts != housePower) ||
+      (ceRightMode == 4 &&
+       gSmoothDashboardCache.forecastRevision != gSolarForecast.revision);
 
   if (ceRightChanged) {
-    display.fillRect(128, 89, 112, 18, TFT_BLACK);
-    display.setTextSize(1); display.setTextFont(2);
-    if (ceRightMode == 1) {
-      display.setTextColor(TFT_ORANGE, TFT_BLACK);
-      display.setCursor(129, 91, 2);
-      display.print("REPRISE ");
-      const String releaseText =
-          gDisplayValues.dimmerReleaseTemp > 0.0f
-              ? String(gDisplayValues.dimmerReleaseTemp, 0)
-              : "--";
-      display.print(releaseText);
-      const int degreeX = 129 + display.textWidth("REPRISE ", 2) +
-                          display.textWidth(releaseText, 2) + 1;
-      drawDegreeCUnitTTGO(degreeX, 91, 2, TFT_ORANGE, TFT_BLACK);
-    }
-    else if (ceRightMode == 2) {
+    display.fillRect(128, 80, 112, 31, TFT_BLACK);
+    if (ceRightMode == 2) {
+      display.setTextSize(1); display.setTextFont(2);
       display.setTextColor(TFT_YELLOW, TFT_BLACK);
-      display.setCursor(145, 91, 2); display.print("START");
+      display.setCursor(145, 86, 2); display.print("START");
+    }
+    else if (ceRightMode == 4) {
+      drawSolarForecastTTGO();
     }
     else if (ceRightMode == 3) {
-      drawHouseIcon(133, 90, TFT_WHITE);
+      display.setTextSize(1); display.setTextFont(2);
+      drawHouseIcon(133, 85, TFT_WHITE);
       display.setTextColor(TFT_WHITE, TFT_BLACK);
-      display.setCursor(151, 91, 2);
+      display.setCursor(151, 86, 2);
       display.print(formatPowerTTGO(housePower));
     }
     gSmoothDashboardCache.ceRightMode = ceRightMode;
-    gSmoothDashboardCache.releaseTenths = releaseTenths;
     gSmoothDashboardCache.houseWatts = housePower;
+    gSmoothDashboardCache.forecastRevision = gSolarForecast.revision;
   }
 
   drawSmoothGaugeTTGO(gaugePower, gDisplayValues.froniusup, fullRedraw);

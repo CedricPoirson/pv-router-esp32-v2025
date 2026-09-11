@@ -1,0 +1,156 @@
+- id: pv_router_solcast_forecast
+  alias: PV Router - Prévision Solcast
+  description: Envoi des fenêtres solaires Solcast au PV Router TTGO
+  mode: restart
+
+  triggers:
+    - trigger: homeassistant
+      event: start
+
+    - trigger: state
+      entity_id:
+        - sensor.solcast_pv_forecast_previsions_pour_aujourd_hui
+
+    - trigger: time_pattern
+      minutes: "/30"
+
+  conditions: []
+
+  actions:
+    - delay:
+        seconds: 10
+
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: >-
+                {{
+                  (
+                    state_attr(
+                      'sensor.solcast_pv_forecast_previsions_pour_aujourd_hui',
+                      'detailedForecast'
+                    ) or []
+                  ) | count > 0
+                }}
+
+          sequence:
+            - action: mqtt.publish
+              data:
+                topic: pvrouter/forecast
+                retain: true
+                payload: >-
+                  {% set forecast =
+                    state_attr(
+                      'sensor.solcast_pv_forecast_previsions_pour_aujourd_hui',
+                      'detailedForecast'
+                    ) or []
+                  %}
+
+                  {% set ns25 = namespace(first=none,last=none) %}
+                  {% set ns20 = namespace(first=none,last=none) %}
+                  {% set wx = namespace(peak=0) %}
+
+                  {# First/last half-hour >= thresholds. #}
+                  {% for p in forecast %}
+                    {% set power = p.pv_estimate | float(0) %}
+                    {% set dt = as_local(as_datetime(p.period_start)) %}
+
+                    {% if power > wx.peak %}
+                      {% set wx.peak = power %}
+                    {% endif %}
+
+                    {% if power >= 2.5 %}
+                      {% if ns25.first is none %}
+                        {% set ns25.first = dt %}
+                      {% endif %}
+                      {% set ns25.last = dt %}
+                    {% endif %}
+
+                    {% if power >= 2.0 %}
+                      {% if ns20.first is none %}
+                        {% set ns20.first = dt %}
+                      {% endif %}
+                      {% set ns20.last = dt %}
+                    {% endif %}
+                  {% endfor %}
+
+                  {# End time is the end of Solcast's 30-minute interval. #}
+                  {% set duration25 = 0 %}
+                  {% if ns25.first is not none and ns25.last is not none %}
+                    {% set duration25 =
+                      (
+                        as_timestamp(ns25.last + timedelta(minutes=30))
+                        - as_timestamp(ns25.first)
+                      ) / 3600
+                    %}
+                  {% endif %}
+
+                  {# Detect marked mid-day dips, not normal sunrise/sunset ramps. #}
+                  {% set variability = namespace(dips=0) %}
+                  {% set count = forecast | count %}
+
+                  {% if count >= 3 %}
+                    {% for i in range(1, count-1) %}
+                      {% set previous = forecast[i-1].pv_estimate | float(0) %}
+                      {% set current = forecast[i].pv_estimate | float(0) %}
+                      {% set following = forecast[i+1].pv_estimate | float(0) %}
+                      {% set dt = as_local(as_datetime(forecast[i].period_start)) %}
+
+                      {% if
+                        ns20.first is not none
+                        and ns20.last is not none
+                        and dt >= ns20.first
+                        and dt <= ns20.last
+                      %}
+                        {% set neighbours = [previous, following] | min %}
+                        {% if neighbours >= 2.0 and current < neighbours * 0.72 %}
+                          {% set variability.dips = variability.dips + 1 %}
+                        {% endif %}
+                      {% endif %}
+                    {% endfor %}
+                  {% endif %}
+
+                  {# Solar-day quality used only for the TTGO pictogram. #}
+                  {% if wx.peak < 1.5 or ns20.first is none %}
+                    {% set weather = "cloudy" %}
+                  {% elif wx.peak >= 4 and duration25 >= 4 and variability.dips == 0 %}
+                    {% set weather = "sunny" %}
+                  {% else %}
+                    {% set weather = "variable" %}
+                  {% endif %}
+
+                  {
+                    "weather": "{{ weather }}",
+                    "p2500_start":
+                    {% if ns25.first %}
+                      "{{ ns25.first.strftime('%H:%M') }}"
+                    {% else %}
+                      null
+                    {% endif %},
+                    "p2500_end":
+                    {% if ns25.last %}
+                      "{{ (ns25.last + timedelta(minutes=30)).strftime('%H:%M') }}"
+                    {% else %}
+                      null
+                    {% endif %},
+                    "p2000_start":
+                    {% if ns20.first %}
+                      "{{ ns20.first.strftime('%H:%M') }}"
+                    {% else %}
+                      null
+                    {% endif %},
+                    "p2000_end":
+                    {% if ns20.last %}
+                      "{{ (ns20.last + timedelta(minutes=30)).strftime('%H:%M') }}"
+                    {% else %}
+                      null
+                    {% endif %},
+                    "valid_until": {{ as_timestamp(now() + timedelta(hours=2)) | int }}
+                  }
+
+      default:
+        - action: mqtt.publish
+          data:
+            topic: pvrouter/forecast
+            retain: true
+            payload: '{"valid":false}'

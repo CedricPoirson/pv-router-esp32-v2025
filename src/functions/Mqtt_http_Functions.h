@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include "../config/config.h"
 #include "../config/enums.h"
+#include "solarForecast.h"
 #include <PubSubClient.h>
 #include <WiFi.h>
 
@@ -154,7 +155,11 @@ void publishHADiscovery()
 
 void mqttCallback(char* topic, byte* payload, unsigned int length)
 {
-  // No command topic is currently required.
+  if (!topic) return;
+
+  if (strcmp(topic, PVROUTER_FORECAST_TOPIC) == 0) {
+    handleSolarForecastPayload(payload, length);
+  }
 }
 
 void Mqtt_publishState()
@@ -274,6 +279,8 @@ void reconnect()
                        0, true, "offline")) {
       Serial.println("connected");
       client.publish(PVROUTER_AVAILABILITY_TOPIC, "online", true);
+      client.subscribe(PVROUTER_FORECAST_TOPIC);
+      Serial.printf("[MQTT] subscribed %s\n", PVROUTER_FORECAST_TOPIC);
       publishHADiscovery();
       Mqtt_publishState();
     }
