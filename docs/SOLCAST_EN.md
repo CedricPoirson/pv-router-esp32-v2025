@@ -110,13 +110,37 @@ explicitly clears the forecast.
 
 ## Diagnostics
 
-In Home Assistant, listen to:
+In Home Assistant, listen to the source topic:
 
 ```text
 pvrouter/forecast
 ```
 
-The router serial log should contain for example:
+The router also publishes a retained compact diagnostic document to:
+
+```text
+pvrouter/forecast/diagnostic
+```
+
+Example:
+
+```json
+{
+  "valid": true,
+  "fresh": true,
+  "reason": "ok",
+  "weather": "sunny",
+  "age_s": 0,
+  "valid_until": 1789060693,
+  "utc_now": 1789053493,
+  "expires_in_s": 7200,
+  "revision": 4,
+  "p2500": {"start":"10:00","end":"18:00"},
+  "p2000": {"start":"09:30","end":"18:30"}
+}
+```
+
+The router serial log also contains for example:
 
 ```text
 [MQTT] subscribed pvrouter/forecast
@@ -134,7 +158,7 @@ local_ttl_expired   = last MQTT forecast is older than 8 h
 valid_until_expired = absolute timestamp has expired
 ```
 
-If MQTT data is correct but nothing appears on the TTGO, check `reason`, `expires_in`, NTP synchronization and the firmware version first.
+If MQTT data is correct but nothing appears on the TTGO, check `reason`, `expires_in_s`, NTP synchronization and the firmware version first.
 
 ## TTGO display
 
