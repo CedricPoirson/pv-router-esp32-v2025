@@ -110,13 +110,37 @@ efface explicitement la prévision.
 
 ## Diagnostic
 
-Dans Home Assistant, écouter le topic :
+Dans Home Assistant, écouter le topic source :
 
 ```text
 pvrouter/forecast
 ```
 
-Le log série du routeur doit afficher par exemple :
+Le routeur publie aussi, en retained, un diagnostic compact sur :
+
+```text
+pvrouter/forecast/diagnostic
+```
+
+Exemple :
+
+```json
+{
+  "valid": true,
+  "fresh": true,
+  "reason": "ok",
+  "weather": "sunny",
+  "age_s": 0,
+  "valid_until": 1789060693,
+  "utc_now": 1789053493,
+  "expires_in_s": 7200,
+  "revision": 4,
+  "p2500": {"start":"10:00","end":"18:00"},
+  "p2000": {"start":"09:30","end":"18:30"}
+}
+```
+
+Le log série du routeur affiche aussi :
 
 ```text
 [MQTT] subscribed pvrouter/forecast
@@ -134,7 +158,7 @@ local_ttl_expired   = dernier MQTT reçu depuis plus de 8 h
 valid_until_expired = timestamp absolu dépassé
 ```
 
-Si le message MQTT est correct mais n'apparaît pas sur le TTGO, vérifier en priorité `reason`, `expires_in`, la synchronisation NTP et la version du firmware.
+Si le message MQTT est correct mais n'apparaît pas sur le TTGO, vérifier en priorité `reason`, `expires_in_s`, la synchronisation NTP et la version du firmware.
 
 ## Affichage TTGO
 
