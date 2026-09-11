@@ -75,35 +75,61 @@ static SolarForecastWeather solarForecastWeatherFromString(String value)
   return SOLAR_WEATHER_UNKNOWN;
 }
 
+static int64_t solarForecastUtcNowEpoch()
+{
+  const int64_t localEpoch = (int64_t)timeClient.getEpochTime();
+  return localEpoch - (int64_t)gNtpParisOffsetSeconds;
+}
+
+static long solarForecastAgeSeconds()
+{
+  if (gSolarForecast.receivedMs == 0) return -1;
+  return (long)((unsigned long)(millis() - gSolarForecast.receivedMs) / 1000UL);
+}
+
+static long solarForecastExpiresInSeconds()
+{
+  if (gSolarForecast.validUntilEpoch == 0) return -1;
+
+  const int64_t nowUtcEpoch = solarForecastUtcNowEpoch();
+  if (nowUtcEpoch <= 1700000000LL) return -1;
+
+  const int64_t remaining =
+      (int64_t)gSolarForecast.validUntilEpoch - nowUtcEpoch;
+
+  if (remaining > 2147483647LL) return 2147483647L;
+  if (remaining < -2147483647LL) return -2147483647L;
+  return (long)remaining;
+}
+
+static const char* solarForecastFreshnessReason()
+{
+  if (!gSolarForecast.valid || gSolarForecast.receivedMs == 0)
+    return "no_data";
+
+  if ((unsigned long)(millis() - gSolarForecast.receivedMs) >
+      8UL * 60UL * 60UL * 1000UL)
+    return "local_ttl_expired";
+
+  if (gSolarForecast.validUntilEpoch > 0) {
+    const int64_t nowUtcEpoch = solarForecastUtcNowEpoch();
+    if (nowUtcEpoch <= 1700000000LL)
+      return "waiting_ntp";
+    if ((uint32_t)nowUtcEpoch > gSolarForecast.validUntilEpoch)
+      return "valid_until_expired";
+  }
+
+  return "ok";
+}
+
 static bool solarForecastIsFresh()
 {
-  if (!gSolarForecast.valid || gSolarForecast.receivedMs == 0) return false;
+  const char *reason = solarForecastFreshnessReason();
 
-  // A forecast should normally be republished by Home Assistant every
-  // 30 minutes. Eight hours is intentionally generous but prevents a dead HA
-  // instance from leaving obviously stale information on the TTGO all day.
-  if ((unsigned long)(millis() - gSolarForecast.receivedMs) > 8UL * 60UL * 60UL * 1000UL) {
-    return false;
-  }
-
-  // valid_until is an absolute Unix timestamp produced by Home Assistant and
-  // therefore UTC. NTPClient's getEpochTime() includes our Europe/Paris display
-  // offset, so remove that offset before comparing. This avoids CEST/CET making
-  // a fresh forecast look one or two hours older than it really is.
-  if (gSolarForecast.validUntilEpoch > 0) {
-    const int64_t localEpoch = (int64_t)timeClient.getEpochTime();
-    const int64_t nowUtcEpoch = localEpoch - (int64_t)gNtpParisOffsetSeconds;
-
-    // Before the first successful NTP sync, NTPClient does not yet expose a
-    // plausible Unix epoch. In that case rely on the local eight-hour TTL above
-    // until time becomes valid.
-    if (nowUtcEpoch > 1700000000LL &&
-        (uint32_t)nowUtcEpoch > gSolarForecast.validUntilEpoch) {
-      return false;
-    }
-  }
-
-  return true;
+  // Until NTP has synchronized, keep the retained MQTT forecast available and
+  // rely on the local eight-hour TTL. Once UTC becomes plausible,
+  // valid_until is enforced normally.
+  return strcmp(reason, "ok") == 0 || strcmp(reason, "waiting_ntp") == 0;
 }
 
 static String solarForecastWindowLine(const char *threshold,
@@ -169,6 +195,15 @@ static bool handleSolarForecastPayload(const byte *payload, unsigned int length)
                 gSolarForecast.p2500End.c_str(),
                 gSolarForecast.p2000Start.c_str(),
                 gSolarForecast.p2000End.c_str());
+
+  const int64_t nowUtcEpoch = solarForecastUtcNowEpoch();
+  const long expiresIn = solarForecastExpiresInSeconds();
+  Serial.printf("[FORECAST] diag reason=%s age=%ld s valid_until=%lu utc=%lld expires_in=%ld s\n",
+                solarForecastFreshnessReason(),
+                solarForecastAgeSeconds(),
+                (unsigned long)gSolarForecast.validUntilEpoch,
+                (long long)nowUtcEpoch,
+                expiresIn);
   return true;
 }
 
