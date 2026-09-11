@@ -98,6 +98,8 @@ Two safeguards prevent an old forecast from remaining on screen:
 - absolute expiry through `valid_until`;
 - a local 8-hour TTL since the last received MQTT forecast.
 
+Before the first NTP synchronization, the router temporarily keeps the received forecast and relies on the local TTL only. As soon as a plausible UTC time is available, `valid_until` is enforced normally.
+
 Publishing:
 
 ```json
@@ -119,14 +121,20 @@ The router serial log should contain for example:
 ```text
 [MQTT] subscribed pvrouter/forecast
 [FORECAST] sunny | 2.5k 10:00>18:00 | 2.0k 09:30>18:30
+[FORECAST] diag reason=ok age=0 s valid_until=1789060693 utc=1789053493 expires_in=7200 s
 ```
 
-If MQTT data is correct but nothing appears on the TTGO, check first:
+The `reason` field identifies the freshness state directly:
 
-- `valid_until`;
-- NTP synchronization;
-- firmware version;
-- that the main TTGO page is active.
+```text
+ok                  = fresh forecast
+waiting_ntp         = NTP not synchronized yet, local TTL is used
+no_data             = no valid forecast
+local_ttl_expired   = last MQTT forecast is older than 8 h
+valid_until_expired = absolute timestamp has expired
+```
+
+If MQTT data is correct but nothing appears on the TTGO, check `reason`, `expires_in`, NTP synchronization and the firmware version first.
 
 ## TTGO display
 
