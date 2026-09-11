@@ -4,11 +4,13 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <NTPClient.h>
+#include <PubSubClient.h>
 
 // Home Assistant remains responsible for talking to Solcast and reducing the
 // forecast to a tiny, local MQTT payload. The PV Router only displays this
 // information; it is deliberately excluded from the Zero Grid control loop.
 static const char* PVROUTER_FORECAST_TOPIC = "pvrouter/forecast";
+static const char* PVROUTER_FORECAST_DIAG_TOPIC = "pvrouter/forecast/diagnostic";
 
 enum SolarForecastWeather : uint8_t {
   SOLAR_WEATHER_UNKNOWN = 0,
@@ -36,6 +38,7 @@ static SolarForecastData gSolarForecast;
 // order to compare Home Assistant Unix timestamps against true UTC.
 extern NTPClient timeClient;
 extern long gNtpParisOffsetSeconds;
+extern PubSubClient client;
 
 static bool solarForecastValidClock(const String &value)
 {
@@ -73,6 +76,16 @@ static SolarForecastWeather solarForecastWeatherFromString(String value)
     return SOLAR_WEATHER_CLOUDY;
   }
   return SOLAR_WEATHER_UNKNOWN;
+}
+
+static const char* solarForecastWeatherName(SolarForecastWeather weather)
+{
+  switch (weather) {
+    case SOLAR_WEATHER_SUNNY: return "sunny";
+    case SOLAR_WEATHER_VARIABLE: return "variable";
+    case SOLAR_WEATHER_CLOUDY: return "cloudy";
+    default: return "unknown";
+  }
 }
 
 static int64_t solarForecastUtcNowEpoch()
@@ -142,6 +155,45 @@ static String solarForecastWindowLine(const char *threshold,
   return String(threshold) + " " + start + ">" + end;
 }
 
+static void publishSolarForecastDiagnostic()
+{
+  if (!client.connected()) return;
+
+  StaticJsonDocument<640> doc;
+  doc["valid"] = gSolarForecast.valid;
+  doc["fresh"] = solarForecastIsFresh();
+  doc["reason"] = solarForecastFreshnessReason();
+  doc["weather"] = solarForecastWeatherName(gSolarForecast.weather);
+  doc["age_s"] = solarForecastAgeSeconds();
+  doc["valid_until"] = gSolarForecast.validUntilEpoch;
+
+  const int64_t nowUtcEpoch = solarForecastUtcNowEpoch();
+  if (nowUtcEpoch > 1700000000LL)
+    doc["utc_now"] = (uint32_t)nowUtcEpoch;
+  else
+    doc["utc_now"] = nullptr;
+
+  const long expiresIn = solarForecastExpiresInSeconds();
+  if (expiresIn >= 0)
+    doc["expires_in_s"] = expiresIn;
+  else
+    doc["expires_in_s"] = nullptr;
+
+  doc["revision"] = gSolarForecast.revision;
+
+  JsonObject p2500 = doc.createNestedObject("p2500");
+  p2500["start"] = gSolarForecast.p2500Start;
+  p2500["end"] = gSolarForecast.p2500End;
+
+  JsonObject p2000 = doc.createNestedObject("p2000");
+  p2000["start"] = gSolarForecast.p2000Start;
+  p2000["end"] = gSolarForecast.p2000End;
+
+  String payload;
+  serializeJson(doc, payload);
+  client.publish(PVROUTER_FORECAST_DIAG_TOPIC, payload.c_str(), true);
+}
+
 static bool handleSolarForecastPayload(const byte *payload, unsigned int length)
 {
   if (!payload || length == 0 || length > 900) return false;
@@ -159,9 +211,16 @@ static bool handleSolarForecastPayload(const byte *payload, unsigned int length)
   JsonObjectConst root = doc.as<JsonObjectConst>();
   if (root["valid"].is<bool>() && !root["valid"].as<bool>()) {
     gSolarForecast.valid = false;
+    gSolarForecast.weather = SOLAR_WEATHER_UNKNOWN;
+    gSolarForecast.p2500Start = "";
+    gSolarForecast.p2500End = "";
+    gSolarForecast.p2000Start = "";
+    gSolarForecast.p2000End = "";
+    gSolarForecast.validUntilEpoch = 0;
     gSolarForecast.receivedMs = millis();
     gSolarForecast.revision++;
     Serial.println("[FORECAST] cleared by Home Assistant");
+    publishSolarForecastDiagnostic();
     return true;
   }
 
@@ -204,6 +263,8 @@ static bool handleSolarForecastPayload(const byte *payload, unsigned int length)
                 (unsigned long)gSolarForecast.validUntilEpoch,
                 (long long)nowUtcEpoch,
                 expiresIn);
+
+  publishSolarForecastDiagnostic();
   return true;
 }
 
